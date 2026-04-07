@@ -9,578 +9,388 @@
 <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Noto Sans KR',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh;overflow-x:hidden}
+body{font-family:'Noto Sans KR',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
 #toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
-.toast{padding:12px 20px;border-radius:8px;font-size:14px;animation:fadeInToast .3s ease;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.toast{padding:12px 20px;border-radius:8px;font-size:14px;animation:fadeInT .3s ease;box-shadow:0 4px 12px rgba(0,0,0,.4)}
 .toast.success{background:#059669;color:#fff}.toast.error{background:#dc2626;color:#fff}.toast.info{background:#2563eb;color:#fff}
-@keyframes fadeInToast{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
-.progress-bar{display:flex;justify-content:center;gap:8px;padding:24px 16px;background:#161927;border-bottom:1px solid #252a3a;flex-wrap:wrap}
-.step-indicator{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;background:#1e2130;color:#64748b;transition:all .3s}
-.step-indicator.active{background:#3b82f6;color:#fff}.step-indicator.done{background:#059669;color:#fff}
+@keyframes fadeInT{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+.progress-bar{display:flex;justify-content:center;gap:8px;padding:20px 16px;background:#161927;border-bottom:1px solid #252a3a;flex-wrap:wrap}
+.step-ind{padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;background:#1e2130;color:#64748b;transition:.3s}
+.step-ind.active{background:#3b82f6;color:#fff}.step-ind.done{background:#059669;color:#fff}
 .container{max-width:920px;margin:0 auto;padding:32px 16px}
-.step-panel{display:none;animation:fadeIn .4s ease}.step-panel.active{display:block}
+.panel{display:none;animation:fadeIn .4s ease}.panel.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .card{background:#1e2130;border-radius:12px;padding:28px;margin-bottom:20px;border:1px solid #252a3a}
-.card h2{font-size:22px;font-weight:700;margin-bottom:6px;color:#f1f5f9}
-.card h3{font-size:17px;font-weight:600;margin:18px 0 8px;color:#cbd5e1}
-.card p.sub{font-size:14px;color:#94a3b8;margin-bottom:18px}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;border:none;transition:all .2s}
-.btn-primary{background:#3b82f6;color:#fff}.btn-primary:hover{background:#2563eb}
-.btn-primary:disabled{background:#334155;color:#64748b;cursor:not-allowed}
-.btn-secondary{background:#334155;color:#cbd5e1}.btn-secondary:hover{background:#3f4963}
-.btn-success{background:#059669;color:#fff}.btn-success:hover{background:#047857}
-input[type="text"],input[type="number"],textarea{width:100%;padding:10px 14px;border-radius:8px;border:1px solid #334155;background:#0f1117;color:#e2e8f0;font-size:14px;font-family:inherit;transition:border-color .2s}
+h2{font-size:22px;font-weight:700;margin-bottom:6px;color:#f1f5f9}
+h3{font-size:17px;font-weight:600;margin:18px 0 8px;color:#cbd5e1}
+.sub{font-size:14px;color:#94a3b8;margin-bottom:18px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;border:none;transition:.2s}
+.btn-p{background:#3b82f6;color:#fff}.btn-p:hover{background:#2563eb}.btn-p:disabled{background:#334155;color:#64748b;cursor:not-allowed}
+.btn-s{background:#334155;color:#cbd5e1}.btn-s:hover{background:#3f4963}
+.btn-g{background:#059669;color:#fff}.btn-g:hover{background:#047857}
+input[type="text"],input[type="number"],textarea{width:100%;padding:10px 14px;border-radius:8px;border:1px solid #334155;background:#0f1117;color:#e2e8f0;font-size:14px;font-family:inherit}
 input:focus,textarea:focus{outline:none;border-color:#3b82f6}
 textarea{resize:vertical;min-height:60px}
 label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:block}
-.form-group{margin-bottom:14px}
-.upload-area{border:2px dashed #334155;border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
-.upload-area:hover,.upload-area.dragover{border-color:#3b82f6;background:rgba(59,130,246,.06)}
+.fg{margin-bottom:14px}
+.upload-area{border:2px dashed #334155;border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:.2s;position:relative}
+.upload-area:hover{border-color:#3b82f6;background:rgba(59,130,246,.06)}
 .upload-area input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
-.upload-area .icon{font-size:40px;margin-bottom:8px}.upload-area .label{font-size:15px;color:#94a3b8}
-.upload-area .filename{font-size:14px;color:#3b82f6;margin-top:8px;font-weight:600}
 .img-preview{max-width:100%;border-radius:8px;margin:12px 0;border:1px solid #334155}
 .date-badge{display:inline-block;padding:6px 16px;border-radius:6px;background:rgba(59,130,246,.12);color:#60a5fa;font-size:14px;font-weight:500;margin:4px}
 .spinner-wrap{text-align:center;padding:60px 0}
 .spinner{width:48px;height:48px;border:4px solid #252a3a;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.report-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0}
-.report-table th{background:#252a3a;color:#94a3b8;padding:10px 8px;text-align:left;font-weight:600;white-space:nowrap}
-.report-table td{padding:9px 8px;border-bottom:1px solid #1a1d2e;color:#cbd5e1}
-.report-table td[contenteditable="true"]:hover{outline:1px solid #3b82f6;border-radius:3px;cursor:text}
-.report-table tr:nth-child(even) td{background:rgba(30,33,48,.5)}
-.week-label{display:inline-block;padding:3px 10px;border-radius:4px;font-size:12px;font-weight:600}
-.week-label.last{background:rgba(99,102,241,.15);color:#818cf8}
-.week-label.this{background:rgba(16,185,129,.15);color:#34d399}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0}
+.tbl th{background:#252a3a;color:#94a3b8;padding:10px 8px;text-align:left;font-weight:600;white-space:nowrap}
+.tbl td{padding:9px 8px;border-bottom:1px solid #1a1d2e;color:#cbd5e1}
+.tbl td[contenteditable="true"]:hover{outline:1px solid #3b82f6;border-radius:3px}
+.tbl tr:nth-child(even) td{background:rgba(30,33,48,.5)}
+.wl{display:inline-block;padding:3px 10px;border-radius:4px;font-size:12px;font-weight:600}
+.wl.last{background:rgba(99,102,241,.15);color:#818cf8}
+.wl.this{background:rgba(16,185,129,.15);color:#34d399}
 .log-box{background:#0f1117;border:1px solid #252a3a;border-radius:8px;padding:12px;margin:12px 0;max-height:200px;overflow-y:auto;font-size:12px;font-family:monospace;color:#94a3b8}
 .log-box .ok{color:#34d399}.log-box .err{color:#f87171}.log-box .warn{color:#fbbf24}
-.flex{display:flex}.flex-wrap{flex-wrap:wrap}.gap-2{gap:8px}
-.mt-2{margin-top:8px}.mt-3{margin-top:12px}.mt-4{margin-top:16px}.mb-3{margin-bottom:12px}
-.text-center{text-align:center}.text-sm{font-size:13px}.text-muted{color:#64748b}.hidden{display:none!important}
+.flex{display:flex}.fw{flex-wrap:wrap}.g2{gap:8px}.mt2{margin-top:8px}.mt3{margin-top:12px}.mt4{margin-top:16px}.mb3{margin-bottom:12px}
+.tc{text-align:center}.ts{font-size:13px}.tm{color:#64748b}.hidden{display:none!important}
 .main-title{font-size:28px;font-weight:700;text-align:center;background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
-.main-subtitle{text-align:center;font-size:14px;color:#64748b;margin-bottom:28px}
-.date-override{margin-top:16px;padding:12px;border-radius:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2)}
-.date-override label{color:#f59e0b}
-@media(max-width:600px){.card{padding:18px}.main-title{font-size:22px}.report-table{font-size:12px}.btn{padding:8px 16px;font-size:14px}}
+.main-sub{text-align:center;font-size:14px;color:#64748b;margin-bottom:28px}
+.date-ov{margin-top:16px;padding:12px;border-radius:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2)}
+.date-ov label{color:#f59e0b}
+.nav-row{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+@media(max-width:600px){.card{padding:18px}.main-title{font-size:22px}.tbl{font-size:12px}}
 </style>
 </head>
 <body>
 <div id="toast-container"></div>
 <div class="progress-bar">
-  <div class="step-indicator active" data-step="1">① 시작</div>
-  <div class="step-indicator" data-step="2">② 수집</div>
-  <div class="step-indicator" data-step="3">③ 채널현황</div>
-  <div class="step-indicator" data-step="4">④ 콘텐츠유형</div>
-  <div class="step-indicator" data-step="5">⑤ 구독자·일정</div>
-  <div class="step-indicator" data-step="6">⑥ 미리보기</div>
+<div class="step-ind active" data-s="1">① 시작</div>
+<div class="step-ind" data-s="2">② 수집</div>
+<div class="step-ind" data-s="3">③ 채널현황</div>
+<div class="step-ind" data-s="4">④ 콘텐츠유형</div>
+<div class="step-ind" data-s="5">⑤ 구독자·메모</div>
+<div class="step-ind" data-s="6">⑥ 미리보기</div>
 </div>
 <div class="container">
 
 <!-- STEP 1 -->
-<div class="step-panel active" id="step1">
-  <div class="card text-center">
-    <div class="main-title">머니올라 주간 보고서 생성기</div>
-    <p class="main-subtitle">매주 화요일, 지난주 실적과 이번주 계획을 자동 정리합니다.</p>
-    <div class="upload-area" id="docxUploadArea">
-      <div class="icon">📄</div>
-      <div class="label">지난주 보고서 파일(.docx)을 업로드해주세요</div>
-      <div class="filename" id="docxFileName"></div>
-      <input type="file" accept=".docx" id="docxFileInput">
-    </div>
-    <div class="date-override mt-3">
-      <label>📅 오늘이 화요일이 아닌 경우 기준 날짜 수동 지정</label>
-      <input type="date" id="manualDateInput" class="mt-2" style="max-width:220px;">
-      <p class="text-sm text-muted mt-2">비워두면 오늘 날짜(자동)를 사용합니다.</p>
-    </div>
-    <div id="dateRangeDisplay" class="mt-3 hidden"></div>
-    <button class="btn btn-primary mt-4" id="btnStartStep1" disabled>작성 시작 →</button>
-  </div>
-</div>
+<div class="panel active" id="step1"><div class="card tc">
+<div class="main-title">머니올라 주간 보고서 생성기</div>
+<p class="main-sub">매주 화요일, 지난주 실적과 이번주 계획을 자동 정리합니다.</p>
+<div class="upload-area" id="ua1"><div style="font-size:40px">📄</div><div style="color:#94a3b8">지난주 보고서(.docx) 업로드 (선택)</div><div id="fn1" style="color:#3b82f6;font-weight:600;margin-top:8px"></div><input type="file" accept=".docx" id="fi1"></div>
+<div class="date-ov mt3"><label>📅 기준 날짜 수동 지정 (선택)</label><input type="date" id="manDate" class="mt2" style="max-width:220px"><p class="ts tm mt2">비워두면 오늘 날짜(자동)를 사용합니다.</p></div>
+<div id="dateDisp" class="mt3 hidden"></div>
+<button class="btn btn-p mt4" id="btnStart">작성 시작 →</button>
+</div></div>
 
 <!-- STEP 2 -->
-<div class="step-panel" id="step2">
-  <div class="card">
-    <div class="spinner-wrap" id="step2Loading">
-      <div class="spinner"></div>
-      <p>데이터를 수집 중입니다...</p>
-      <p class="text-sm text-muted mt-2" id="step2Status">준비 중...</p>
-    </div>
-    <div id="step2Result" class="hidden">
-      <h2>📋 수집 결과</h2>
-      <div id="step2Log" class="log-box"></div>
-      <h3>지난주 업로드 영상 (유튜브)</h3>
-      <div id="ytResult"></div>
-      <h3 class="mt-3">지난주 일정표 (구글 문서)</h3>
-      <div id="scheduleLastResult"></div>
-      <h3 class="mt-3">이번주 일정표 (구글 문서)</h3>
-      <div id="scheduleThisResult"></div>
-      <div class="flex gap-2 mt-4" style="justify-content:flex-end">
-        <button class="btn btn-secondary" onclick="goStep(1)">← 이전</button>
-        <button class="btn btn-primary" onclick="goStep(3)">다음 →</button>
-      </div>
-    </div>
-  </div>
-</div>
+<div class="panel" id="step2"><div class="card">
+<div class="spinner-wrap" id="s2load"><div class="spinner"></div><p>Google Apps Script에서 데이터를 수집 중...</p><p class="ts tm mt2" id="s2status">준비 중...</p></div>
+<div id="s2result" class="hidden">
+<h2>📋 수집 결과</h2>
+<div id="s2log" class="log-box"></div>
+<h3>📺 지난주 업로드 영상 (유튜브)</h3><div id="ytR"></div>
+<h3 class="mt3">📅 지난주 일정 (구글 문서)</h3><div id="schLast"></div>
+<h3 class="mt3">📅 이번주 일정 (구글 문서)</h3><div id="schThis"></div>
+<div class="nav-row"><button class="btn btn-s" onclick="go(1)">← 이전</button><button class="btn btn-p" onclick="go(3)">다음 →</button></div>
+</div></div></div>
 
 <!-- STEP 3 -->
-<div class="step-panel" id="step3">
-  <div class="card">
-    <h2>📊 채널 현황 이미지 업로드</h2>
-    <p class="sub">유튜브 스튜디오 → 채널 분석 → 개요 스크린샷을 업로드하세요.</p>
-    <div class="upload-area" id="channelImgArea">
-      <div class="icon">🖼️</div>
-      <div class="label">이미지를 드래그하거나 클릭하여 업로드</div>
-      <input type="file" accept="image/*" id="channelImgInput">
-    </div>
-    <img id="channelImgPreview" class="img-preview hidden">
-    <h3>채널 성과 데이터 입력</h3>
-    <p class="text-sm text-muted mb-3">이미지를 참고하여 아래 값을 입력하세요.</p>
-    <div class="flex flex-wrap gap-2">
-      <div class="form-group" style="flex:1;min-width:140px"><label>기간 라벨</label><input type="text" id="ch_period" placeholder="예: 최근 28일"></div>
-      <div class="form-group" style="flex:1;min-width:140px"><label>조회수</label><input type="text" id="ch_views" placeholder="예: 1,234,567"></div>
-      <div class="form-group" style="flex:1;min-width:140px"><label>구독자 변화</label><input type="text" id="ch_subs" placeholder="예: +320"></div>
-    </div>
-    <div class="flex flex-wrap gap-2">
-      <div class="form-group" style="flex:1;min-width:140px"><label>수익 (원)</label><input type="text" id="ch_revenue" placeholder="예: 2,500,000"></div>
-      <div class="form-group" style="flex:1;min-width:140px"><label>CPM (원)</label><input type="text" id="ch_cpm" placeholder="예: 3,200"></div>
-      <div class="form-group" style="flex:1;min-width:140px"><label>RPM (원)</label><input type="text" id="ch_rpm" placeholder="예: 1,800"></div>
-    </div>
-    <div class="flex flex-wrap gap-2">
-      <div class="form-group" style="flex:1;min-width:140px"><label>클릭률 (%)</label><input type="text" id="ch_ctr" placeholder="예: 5.2"></div>
-      <div class="form-group" style="flex:1;min-width:140px"><label>평균 시청시간</label><input type="text" id="ch_avgWatch" placeholder="예: 4:32"></div>
-    </div>
-    <div class="flex gap-2 mt-4" style="justify-content:flex-end">
-      <button class="btn btn-secondary" onclick="goStep(2)">← 이전</button>
-      <button class="btn btn-primary" onclick="saveStep3();goStep(4)">다음 →</button>
-    </div>
-  </div>
+<div class="panel" id="step3"><div class="card">
+<h2>📊 채널 현황</h2><p class="sub">유튜브 스튜디오 → 채널 분석 스크린샷 업로드 후 데이터를 입력하세요.</p>
+<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">이미지 업로드</div><input type="file" accept="image/*" id="chImg"></div>
+<img id="chImgP" class="img-preview hidden">
+<h3>채널 성과 데이터</h3>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:140px"><label>기간</label><input type="text" id="ch_period" placeholder="최근 28일"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>조회수</label><input type="text" id="ch_views" placeholder="1,234,567"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>구독자 변화</label><input type="text" id="ch_subs" placeholder="+320"></div>
 </div>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:140px"><label>수익 (원)</label><input type="text" id="ch_rev" placeholder="2,500,000"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>CPM</label><input type="text" id="ch_cpm" placeholder="3,200"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>RPM</label><input type="text" id="ch_rpm" placeholder="1,800"></div>
+</div>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:140px"><label>클릭률(%)</label><input type="text" id="ch_ctr" placeholder="5.2"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>평균 시청시간</label><input type="text" id="ch_avg" placeholder="4:32"></div>
+</div>
+<div class="nav-row"><button class="btn btn-s" onclick="go(2)">← 이전</button><button class="btn btn-p" onclick="saveS3();go(4)">다음 →</button></div>
+</div></div>
 
 <!-- STEP 4 -->
-<div class="step-panel" id="step4">
-  <div class="card">
-    <h2>📺 콘텐츠 유형별 이미지 업로드</h2>
-    <p class="sub">유튜브 스튜디오 → 콘텐츠 유형별 분석 스크린샷을 업로드하세요.</p>
-    <div class="upload-area" id="contentImgArea">
-      <div class="icon">🖼️</div>
-      <div class="label">이미지를 드래그하거나 클릭하여 업로드</div>
-      <input type="file" accept="image/*" id="contentImgInput">
-    </div>
-    <img id="contentImgPreview" class="img-preview hidden">
-    <h3>콘텐츠 유형별 데이터 입력</h3>
-    <div class="form-group" style="max-width:300px"><label>기간 라벨</label><input type="text" id="ct_period" placeholder="예: 최근 28일"></div>
-    <h3>동영상</h3>
-    <div class="flex flex-wrap gap-2">
-      <div class="form-group" style="flex:1;min-width:120px"><label>조회수</label><input type="text" id="ct_vid_views"></div>
-      <div class="form-group" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_vid_views_pct"></div>
-      <div class="form-group" style="flex:1;min-width:120px"><label>시청시간</label><input type="text" id="ct_vid_watch"></div>
-      <div class="form-group" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_vid_watch_pct"></div>
-    </div>
-    <h3>쇼츠</h3>
-    <div class="flex flex-wrap gap-2">
-      <div class="form-group" style="flex:1;min-width:120px"><label>조회수</label><input type="text" id="ct_short_views"></div>
-      <div class="form-group" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_short_views_pct"></div>
-      <div class="form-group" style="flex:1;min-width:120px"><label>시청시간</label><input type="text" id="ct_short_watch"></div>
-      <div class="form-group" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_short_watch_pct"></div>
-    </div>
-    <div class="flex gap-2 mt-4" style="justify-content:flex-end">
-      <button class="btn btn-secondary" onclick="goStep(3)">← 이전</button>
-      <button class="btn btn-primary" onclick="saveStep4();goStep(5)">다음 →</button>
-    </div>
-  </div>
+<div class="panel" id="step4"><div class="card">
+<h2>📺 콘텐츠 유형별</h2><p class="sub">콘텐츠 유형별 분석 스크린샷 업로드 후 데이터를 입력하세요.</p>
+<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">이미지 업로드</div><input type="file" accept="image/*" id="ctImg"></div>
+<img id="ctImgP" class="img-preview hidden">
+<div class="fg" style="max-width:300px"><label>기간</label><input type="text" id="ct_period" placeholder="최근 28일"></div>
+<h3>동영상</h3>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:120px"><label>조회수</label><input type="text" id="ct_vv"></div>
+<div class="fg" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_vvp"></div>
+<div class="fg" style="flex:1;min-width:120px"><label>시청시간</label><input type="text" id="ct_vw"></div>
+<div class="fg" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_vwp"></div>
 </div>
+<h3>Shorts</h3>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:120px"><label>조회수</label><input type="text" id="ct_sv"></div>
+<div class="fg" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_svp"></div>
+<div class="fg" style="flex:1;min-width:120px"><label>시청시간</label><input type="text" id="ct_sw"></div>
+<div class="fg" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_swp"></div>
+</div>
+<div class="nav-row"><button class="btn btn-s" onclick="go(3)">← 이전</button><button class="btn btn-p" onclick="saveS4();go(5)">다음 →</button></div>
+</div></div>
 
 <!-- STEP 5 -->
-<div class="step-panel" id="step5">
-  <div class="card">
-    <h2>👥 구독자 수 & 팀원 특이사항</h2>
-    <div class="form-group"><label>오늘(<span id="todayLabel"></span>) 현재 구독자 수</label><input type="text" id="currentSubs" placeholder="예: 533,443"></div>
-    <h3>팀원 특이사항</h3>
-    <div class="form-group"><label>양영은 님 특이사항</label><textarea id="noteYang" placeholder="예: 이번 주 연차 (4/9)"></textarea></div>
-    <div class="form-group"><label>최건일 님 특이사항</label><textarea id="noteChoi" placeholder="예: 없음"></textarea></div>
-    <div class="flex gap-2 mt-4" style="justify-content:flex-end">
-      <button class="btn btn-secondary" onclick="goStep(4)">← 이전</button>
-      <button class="btn btn-primary" onclick="saveStep5();buildPreview();goStep(6)">다음 →</button>
-    </div>
-  </div>
-</div>
+<div class="panel" id="step5"><div class="card">
+<h2>👥 구독자 & 팀원 메모</h2>
+<div class="fg"><label>현재 구독자 수 (<span id="todayL"></span>)</label><input type="text" id="curSubs" placeholder="533,443"></div>
+<h3>팀원 특이사항</h3>
+<div class="fg"><label>양영은</label><textarea id="noteY" placeholder="예: 이번 주 연차 (4/9)"></textarea></div>
+<div class="fg"><label>최건일</label><textarea id="noteC" placeholder="예: 없음"></textarea></div>
+<div class="nav-row"><button class="btn btn-s" onclick="go(4)">← 이전</button><button class="btn btn-p" onclick="saveS5();buildPreview();go(6)">다음 →</button></div>
+</div></div>
 
 <!-- STEP 6 -->
-<div class="step-panel" id="step6">
-  <div class="card">
-    <h2>📝 미리보기 & 다운로드</h2>
-    <p class="sub">각 셀을 클릭하여 직접 수정할 수 있습니다.</p>
-    <div id="previewArea"></div>
-    <div class="flex gap-2 mt-4" style="justify-content:flex-end">
-      <button class="btn btn-secondary" onclick="goStep(5)">← 이전</button>
-      <button class="btn btn-success" onclick="generateDocx()">✅ 수정 완료, 문서 생성하기</button>
-    </div>
-  </div>
-</div>
+<div class="panel" id="step6"><div class="card">
+<h2>📝 미리보기 & 다운로드</h2><p class="sub">각 셀을 클릭하여 수정할 수 있습니다.</p>
+<div id="prevArea"></div>
+<div class="nav-row"><button class="btn btn-s" onclick="go(5)">← 이전</button><button class="btn btn-g" onclick="genDocx()">✅ 문서 생성 (.docx)</button></div>
+</div></div>
 
 </div>
+
 <script>
-// ============================================================
-const STATE = {
-  docxFile:null, baseDate:null,
-  lastWeekStart:null, lastWeekEnd:null, thisWeekStart:null, thisWeekEnd:null,
-  lastWeekSchedule:[], thisWeekSchedule:[],
-  ytVideos:[],
-  channelStats:{}, contentType:{},
-  currentSubs:'', noteYang:'', noteChoi:'',
-};
-const DAY_KR=['일','월','화','수','목','금','토'];
+const GAS_URL='https://script.google.com/macros/s/AKfycbwmtjpbT8g9dwr2FFIUyAvaRhCH9quBB_pFAiSYfoQXlfWwW8Qs32VXjIzf9itZgmkXgA/exec';
+const S={docxFile:null,baseDate:null,lws:null,lwe:null,tws:null,twe:null,lastSch:[],thisSch:[],yt:[],ch:{},ct:{},subs:'',nY:'',nC:''};
+const DK=['일','월','화','수','목','금','토'];
+
 function toast(m,t='info'){const c=document.getElementById('toast-container'),d=document.createElement('div');d.className='toast '+t;d.textContent=m;c.appendChild(d);setTimeout(()=>d.remove(),4000)}
-function fmt(d){return `${d.getMonth()+1}/${d.getDate()}(${DAY_KR[d.getDay()]})`}
-function fmtFull(d){return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`}
-function goStep(n){document.querySelectorAll('.step-panel').forEach(p=>p.classList.remove('active'));document.getElementById('step'+n).classList.add('active');document.querySelectorAll('.step-indicator').forEach(el=>{const s=+el.dataset.step;el.classList.remove('active','done');if(s<n)el.classList.add('done');if(s===n)el.classList.add('active')});window.scrollTo({top:0,behavior:'smooth'})}
-function calcDates(base){const d=new Date(base);d.setHours(0,0,0,0);const day=d.getDay();if(day!==2){const diff=(day+7-2)%7;d.setDate(d.getDate()-diff)}STATE.baseDate=new Date(d);STATE.thisWeekStart=new Date(d);STATE.lastWeekStart=new Date(d);STATE.lastWeekStart.setDate(d.getDate()-7);STATE.lastWeekEnd=new Date(d);STATE.lastWeekEnd.setDate(d.getDate()-1);STATE.thisWeekEnd=new Date(d);STATE.thisWeekEnd.setDate(d.getDate()+6)}
-function inRange(date,start,end){const t=new Date(date);t.setHours(0,0,0,0);const s=new Date(start);s.setHours(0,0,0,0);const e=new Date(end);e.setHours(0,0,0,0);return t>=s&&t<=e}
+function fmt(d){return`${d.getMonth()+1}/${d.getDate()}(${DK[d.getDay()]})`}
+function go(n){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById('step'+n).classList.add('active');document.querySelectorAll('.step-ind').forEach(el=>{const s=+el.dataset.s;el.classList.remove('active','done');if(s<n)el.classList.add('done');if(s===n)el.classList.add('active')});scrollTo({top:0,behavior:'smooth'})}
+function calcDates(base){const d=new Date(base);d.setHours(0,0,0,0);const day=d.getDay();if(day!==2){const diff=(day+7-2)%7;d.setDate(d.getDate()-diff)}S.baseDate=new Date(d);S.tws=new Date(d);S.lws=new Date(d);S.lws.setDate(d.getDate()-7);S.lwe=new Date(d);S.lwe.setDate(d.getDate()-1);S.twe=new Date(d);S.twe.setDate(d.getDate()+6)}
+function inRange(date,s,e){const t=new Date(date);t.setHours(0,0,0,0);const a=new Date(s);a.setHours(0,0,0,0);const b=new Date(e);b.setHours(0,0,0,0);return t>=a&&t<=b}
 function sameDay(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()}
-function getDaysInRange(s,e){const days=[],d=new Date(s);while(d<=e){days.push(new Date(d));d.setDate(d.getDate()+1)}return days}
-function getWeekOfMonth(d){const f=new Date(d.getFullYear(),d.getMonth(),1);return Math.ceil((d.getDate()+f.getDay())/7)}
+function daysIn(s,e){const r=[],d=new Date(s);while(d<=e){r.push(new Date(d));d.setDate(d.getDate()+1)}return r}
+function weekOfMonth(d){const f=new Date(d.getFullYear(),d.getMonth(),1);return Math.ceil((d.getDate()+f.getDay())/7)}
+function addLog(m,c=''){const b=document.getElementById('s2log');if(!b)return;const p=document.createElement('div');p.className=c;p.textContent='> '+m;b.appendChild(p);b.scrollTop=b.scrollHeight}
+function clean(s){return(s||'').replace(/\\r/g,' ').replace(/\r/g,' ').replace(/\n/g,' ').replace(/\s+/g,' ').trim()}
 
-// LOG
-function addLog(msg,cls=''){const box=document.getElementById('step2Log');if(box){const p=document.createElement('div');p.className=cls;p.textContent='> '+msg;box.appendChild(p);box.scrollTop=box.scrollHeight}}
-
-// CORS Proxy with fallback
-async function corsProxy(url){
-  const proxies=[
-    u=>`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-    u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-    u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-  ];
-  // Try direct first (works for google docs)
-  try{
-    addLog(`직접 요청 시도: ${url.substring(0,60)}...`);
-    const r=await fetch(url,{mode:'cors'});
-    if(r.ok){const t=await r.text();addLog('직접 요청 성공!','ok');return t}
-  }catch(e){addLog('직접 요청 실패, 프록시 시도...','warn')}
-  // Try proxies
-  for(let i=0;i<proxies.length;i++){
-    try{
-      const pUrl=proxies[i](url);
-      addLog(`프록시 ${i+1} 시도 중...`);
-      const r=await fetch(pUrl);
-      if(!r.ok)continue;
-      const ct=r.headers.get('content-type')||'';
-      if(ct.includes('json')){const j=await r.json();const t=j.contents||j;if(t){addLog(`프록시 ${i+1} 성공!`,'ok');return typeof t==='string'?t:JSON.stringify(t)}}
-      else{const t=await r.text();if(t){addLog(`프록시 ${i+1} 성공!`,'ok');return t}}
-    }catch(e){addLog(`프록시 ${i+1} 실패: ${e.message}`,'err')}
-  }
-  return null;
-}
-
-// STEP 1
-const docxInput=document.getElementById('docxFileInput');
-const btnStart=document.getElementById('btnStartStep1');
-docxInput.addEventListener('change',e=>{const f=e.target.files[0];if(f){STATE.docxFile=f;document.getElementById('docxFileName').textContent='📎 '+f.name;btnStart.disabled=false;toast('파일이 선택되었습니다.','success')}});
-['channelImgArea','contentImgArea','docxUploadArea'].forEach(id=>{const area=document.getElementById(id);if(!area)return;area.addEventListener('dragover',e=>{e.preventDefault();area.classList.add('dragover')});area.addEventListener('dragleave',()=>area.classList.remove('dragover'));area.addEventListener('drop',e=>{e.preventDefault();area.classList.remove('dragover');const input=area.querySelector('input[type="file"]');if(e.dataTransfer.files.length){input.files=e.dataTransfer.files;input.dispatchEvent(new Event('change'))}})});
-
-btnStart.addEventListener('click',()=>{
-  const mv=document.getElementById('manualDateInput').value;
+// Step 1
+document.getElementById('fi1').addEventListener('change',e=>{const f=e.target.files[0];if(f){S.docxFile=f;document.getElementById('fn1').textContent='📎 '+f.name;toast('파일 선택됨','success')}});
+document.getElementById('btnStart').addEventListener('click',()=>{
+  const mv=document.getElementById('manDate').value;
   const base=mv?new Date(mv+'T00:00:00'):new Date();
   calcDates(base);
-  const dd=document.getElementById('dateRangeDisplay');dd.classList.remove('hidden');
-  dd.innerHTML=`<span class="date-badge"><b>지난주:</b> ${fmt(STATE.lastWeekStart)} ~ ${fmt(STATE.lastWeekEnd)}</span><span class="date-badge"><b>이번주:</b> ${fmt(STATE.thisWeekStart)} ~ ${fmt(STATE.thisWeekEnd)}</span>`;
-  setTimeout(()=>{goStep(2);runStep2()},600);
+  const dd=document.getElementById('dateDisp');dd.classList.remove('hidden');
+  dd.innerHTML=`<span class="date-badge"><b>지난주:</b> ${fmt(S.lws)} ~ ${fmt(S.lwe)}</span><span class="date-badge"><b>이번주:</b> ${fmt(S.tws)} ~ ${fmt(S.twe)}</span>`;
+  setTimeout(()=>{go(2);runStep2()},500);
 });
 
-// ============================================================
-// STEP 2
-// ============================================================
+// Step 2
 async function runStep2(){
-  const statusEl=document.getElementById('step2Status');
-  document.getElementById('step2Log').innerHTML='';
-
-  // ── 1) 구글 문서 ──
-  statusEl.textContent='① 구글 문서 일정표 수집 중...';
-  addLog('=== 구글 문서 일정표 수집 시작 ===');
-  let scheduleText=null;
+  const st=document.getElementById('s2status');
+  document.getElementById('s2log').innerHTML='';
+  st.textContent='Google Apps Script 호출 중...';
+  addLog('=== Google Apps Script 데이터 수집 시작 ===');
+  
   try{
-    scheduleText=await corsProxy('https://docs.google.com/document/d/1bgzLVIuVQUK9TDgY5pAzR_XcQzWKEsQaDS8f9CDDlZ8/export?format=txt');
-  }catch(e){addLog('구글 문서 수집 실패: '+e.message,'err')}
-
-  if(scheduleText){
-    const allRows=parseSchedule(scheduleText);
-    addLog(`파싱 완료: 총 ${allRows.length}개 행`);
-    STATE.lastWeekSchedule=allRows.filter(r=>r.date&&inRange(r.date,STATE.lastWeekStart,STATE.lastWeekEnd));
-    STATE.thisWeekSchedule=allRows.filter(r=>r.date&&inRange(r.date,STATE.thisWeekStart,STATE.thisWeekEnd));
-    addLog(`지난주 일정: ${STATE.lastWeekSchedule.length}개, 이번주 일정: ${STATE.thisWeekSchedule.length}개`,'ok');
-    toast(`일정표: 지난주 ${STATE.lastWeekSchedule.length}건 / 이번주 ${STATE.thisWeekSchedule.length}건`,'success');
-  }else{
-    addLog('구글 문서 수집 실패 — Step 6에서 수동 입력하세요','err');
-    toast('일정표 수집 실패','error');
-  }
-
-  // ── 2) 유튜브 RSS ──
-  statusEl.textContent='② 유튜브 RSS 피드 수집 중...';
-  addLog('=== 유튜브 RSS 피드 수집 시작 ===');
-  let rssText=null;
-  try{
-    rssText=await corsProxy('https://www.youtube.com/feeds/videos.xml?channel_id=UCAySceX4rbSr408F1dUpuUw');
-  }catch(e){addLog('유튜브 RSS 실패: '+e.message,'err')}
-
-  if(rssText){
-    STATE.ytVideos=parseRSS(rssText);
-    addLog(`유튜브 영상 수집: ${STATE.ytVideos.length}개 (지난주 범위)`,'ok');
-    toast(`유튜브: ${STATE.ytVideos.length}개 영상 수집됨`,'success');
-  }else{
-    addLog('유튜브 RSS 수집 실패','err');
-    toast('유튜브 수집 실패','error');
-  }
-
-  // ── 3) 유튜브 조회수 보강 (HTML) ──
-  statusEl.textContent='③ 유튜브 조회수 보강 중...';
-  addLog('=== 유튜브 조회수 보강 시도 ===');
-  try{
-    const html=await corsProxy('https://www.youtube.com/@%EB%A8%B8%EB%8B%88%EC%98%AC%EB%9D%BC/videos');
-    if(html)enrichViews(html);
-  }catch(e){addLog('조회수 보강 실패(무시 가능): '+e.message,'warn')}
-
-  // ── 결과 표시 ──
-  document.getElementById('step2Loading').classList.add('hidden');
-  document.getElementById('step2Result').classList.remove('hidden');
-  renderStep2Results();
-}
-
-function parseSchedule(text){
-  const lines=text.split('\n'),rows=[],yr=STATE.baseDate.getFullYear();
-  for(const line of lines){
-    const cols=line.split('\t');
-    if(cols.length<6)continue;
-    const ds=cols[0].trim();
-    const rt=(cols[1]||'').trim();
-    const pf=(cols[2]||'').trim();
-    const ui=(cols[5]||'').trim();
-    const nt=(cols.length>7?(cols[7]||'').trim():'');
-    const m=ds.match(/(\d{1,2})월\s*(\d{1,2})일/);
-    if(!m)continue;
-    const dateObj=new Date(yr,parseInt(m[1])-1,parseInt(m[2]));
-    let studio='';
-    if(/\d{1,2}[;:]\d{2}/.test(rt)&&pf){
-      studio=rt.replace(';',':')+' '+pf;
-    }
-    rows.push({dateStr:ds,date:dateObj,studioRecord:studio,uploadItem:ui,note:nt});
-  }
-  return rows;
-}
-
-function parseRSS(xml){
-  const vids=[];
-  try{
-    const parser=new DOMParser();
-    const doc=parser.parseFromString(xml,'text/xml');
-    // RSS에서 namespace 처리
-    const entries=doc.querySelectorAll('entry');
-    if(entries.length===0){
-      // Try regex fallback
-      const re=/<entry>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<published>([\s\S]*?)<\/published>[\s\S]*?<yt:videoId>([\s\S]*?)<\/yt:videoId>/g;
-      let match;
-      while((match=re.exec(xml))!==null){
-        const title=match[1].trim();
-        const pub=new Date(match[2].trim());
-        const vid=match[3].trim();
-        if(inRange(pub,STATE.lastWeekStart,STATE.lastWeekEnd)){
-          vids.push({title,date:pub,videoId:vid,views:''});
-        }
-      }
-      addLog(`RSS regex fallback: ${vids.length}개 영상`);
-      return vids;
-    }
-    entries.forEach(entry=>{
-      const title=entry.querySelector('title')?.textContent||'';
-      const pub=entry.querySelector('published')?.textContent||'';
-      // videoId might be in yt:videoId
-      let vid='';
-      const vidEl=entry.getElementsByTagName('yt:videoId')[0];
-      if(vidEl)vid=vidEl.textContent;
-      if(!pub)return;
-      const pubDate=new Date(pub);
-      if(inRange(pubDate,STATE.lastWeekStart,STATE.lastWeekEnd)){
-        vids.push({title,date:pubDate,videoId:vid,views:''});
-      }
-    });
-  }catch(e){
-    addLog('RSS 파싱 오류, regex 시도...','warn');
-    // regex fallback
-    const re=/<title>(.*?)<\/title>[\s\S]*?<published>(.*?)<\/published>/g;
-    let match;
-    while((match=re.exec(xml))!==null){
-      const title=match[1].trim();
-      if(title==='머니올라_KBS')continue;
-      const pub=new Date(match[2].trim());
-      if(inRange(pub,STATE.lastWeekStart,STATE.lastWeekEnd)){
-        vids.push({title,date:pub,videoId:'',views:''});
-      }
-    }
-  }
-  return vids;
-}
-
-function enrichViews(html){
-  try{
-    const dm=html.match(/ytInitialData\s*=\s*(\{.+?\});\s*<\/script>/s);
-    if(!dm){addLog('ytInitialData를 찾을 수 없음','warn');return}
-    const data=JSON.parse(dm[1]);
-    const tabs=data?.contents?.twoColumnBrowseResultsRenderer?.tabs||[];
-    const vmap={};
-    for(const tab of tabs){
-      const contents=tab?.tabRenderer?.content?.richGridRenderer?.contents||[];
-      for(const item of contents){
-        const vr=item?.richItemRenderer?.content?.videoRenderer;
-        if(!vr)continue;
-        const vid=vr.videoId||'';
-        const vt=vr.viewCountText?.simpleText||vr.viewCountText?.runs?.map(r=>r.text).join('')||'';
-        if(vid&&vt)vmap[vid]=fmtViews(vt);
-      }
-    }
-    let matched=0;
-    STATE.ytVideos.forEach(v=>{if(vmap[v.videoId]){v.views=vmap[v.videoId];matched++}});
-    addLog(`조회수 매칭: ${matched}/${STATE.ytVideos.length}개`,'ok');
-  }catch(e){addLog('조회수 보강 파싱 오류: '+e.message,'warn')}
-}
-
-function fmtViews(t){
-  if(!t)return '';
-  if(t.includes('만')){const m=t.match(/([\d.]+)만/);if(m)return Math.round(parseFloat(m[1])*10000).toLocaleString()}
-  if(t.includes('억')){const m=t.match(/([\d.]+)억/);if(m)return Math.round(parseFloat(m[1])*1e8).toLocaleString()}
-  const n=t.replace(/[^0-9,]/g,'');return n||t;
-}
-
-function renderStep2Results(){
-  // YT
-  const ytDiv=document.getElementById('ytResult');
-  if(STATE.ytVideos.length===0){
-    ytDiv.innerHTML='<p class="text-sm text-muted">수집된 영상이 없습니다. Step 6에서 수동 입력하세요.</p>';
-  }else{
-    let h='<table class="report-table"><tr><th>날짜</th><th>제목</th><th>조회수</th></tr>';
-    STATE.ytVideos.sort((a,b)=>a.date-b.date).forEach(v=>{
-      h+=`<tr><td>${fmt(v.date)}</td><td>${v.title}</td><td>${v.views||'(Step 6에서 입력)'}</td></tr>`;
-    });
-    h+='</table>';ytDiv.innerHTML=h;
-  }
-  // 지난주 일정
-  const lDiv=document.getElementById('scheduleLastResult');
-  if(STATE.lastWeekSchedule.length===0){
-    lDiv.innerHTML='<p class="text-sm text-muted">수집된 지난주 일정이 없습니다.</p>';
-  }else{
-    let h='<table class="report-table"><tr><th>날짜</th><th>업로드 아이템</th><th>스튜디오 녹화</th><th>특이사항</th></tr>';
-    STATE.lastWeekSchedule.forEach(r=>{h+=`<tr><td>${r.dateStr}</td><td>${r.uploadItem||'-'}</td><td>${r.studioRecord||'-'}</td><td>${r.note||'-'}</td></tr>`});
-    h+='</table>';lDiv.innerHTML=h;
-  }
-  // 이번주 일정
-  const tDiv=document.getElementById('scheduleThisResult');
-  if(STATE.thisWeekSchedule.length===0){
-    tDiv.innerHTML='<p class="text-sm text-muted">수집된 이번주 일정이 없습니다.</p>';
-  }else{
-    let h='<table class="report-table"><tr><th>날짜</th><th>업로드 아이템</th><th>스튜디오 녹화</th><th>특이사항</th></tr>';
-    STATE.thisWeekSchedule.forEach(r=>{h+=`<tr><td>${r.dateStr}</td><td>${r.uploadItem||'-'}</td><td>${r.studioRecord||'-'}</td><td>${r.note||'-'}</td></tr>`});
-    h+='</table>';tDiv.innerHTML=h;
-  }
-}
-
-// STEP 3
-document.getElementById('channelImgInput').addEventListener('change',e=>{const f=e.target.files[0];if(f){const img=document.getElementById('channelImgPreview');img.src=URL.createObjectURL(f);img.classList.remove('hidden');toast('이미지 업로드됨','info')}});
-function saveStep3(){STATE.channelStats={period:document.getElementById('ch_period').value||'최근 28일',views:document.getElementById('ch_views').value,subs:document.getElementById('ch_subs').value,revenue:document.getElementById('ch_revenue').value,cpm:document.getElementById('ch_cpm').value,rpm:document.getElementById('ch_rpm').value,ctr:document.getElementById('ch_ctr').value,avgWatch:document.getElementById('ch_avgWatch').value};toast('채널 현황 저장됨','success')}
-
-// STEP 4
-document.getElementById('contentImgInput').addEventListener('change',e=>{const f=e.target.files[0];if(f){const img=document.getElementById('contentImgPreview');img.src=URL.createObjectURL(f);img.classList.remove('hidden');toast('이미지 업로드됨','info')}});
-function saveStep4(){STATE.contentType={period:document.getElementById('ct_period').value||'최근 28일',vid_views:document.getElementById('ct_vid_views').value,vid_views_pct:document.getElementById('ct_vid_views_pct').value,vid_watch:document.getElementById('ct_vid_watch').value,vid_watch_pct:document.getElementById('ct_vid_watch_pct').value,short_views:document.getElementById('ct_short_views').value,short_views_pct:document.getElementById('ct_short_views_pct').value,short_watch:document.getElementById('ct_short_watch').value,short_watch_pct:document.getElementById('ct_short_watch_pct').value};toast('콘텐츠 유형 저장됨','success')}
-
-// STEP 5
-document.getElementById('todayLabel').textContent=(()=>{const d=new Date();return `${d.getMonth()+1}/${d.getDate()} ${DAY_KR[d.getDay()]}요일`})();
-function saveStep5(){STATE.currentSubs=document.getElementById('currentSubs').value;STATE.noteYang=document.getElementById('noteYang').value;STATE.noteChoi=document.getElementById('noteChoi').value;toast('저장됨','success')}
-
-// ============================================================
-// STEP 6 — PREVIEW
-// ============================================================
-function buildPreview(){
-  const area=document.getElementById('previewArea');
-  const lastLabel=`${STATE.lastWeekStart.getMonth()+1}월 ${getWeekOfMonth(STATE.lastWeekStart)}주차`;
-  const thisLabel=`${STATE.thisWeekStart.getMonth()+1}월 ${getWeekOfMonth(STATE.thisWeekStart)}주차`;
-
-  // ── TABLE 1 ──
-  let t1=`<h3>📌 업로드 및 예정 아이템</h3><table class="report-table" id="table1"><tr><th>구분</th><th>날짜</th><th>업로드 및 예정 아이템</th><th>스튜디오 녹화 일정</th><th>조회수</th></tr>`;
-
-  // 지난주: 유튜브 영상 + 일정표 합치기
-  getDaysInRange(STATE.lastWeekStart,STATE.lastWeekEnd).forEach(d=>{
-    const sch=STATE.lastWeekSchedule.find(s=>s.date&&sameDay(s.date,d));
-    const ytMatches=STATE.ytVideos.filter(v=>v.date&&sameDay(v.date,d));
-
-    if(ytMatches.length>0){
-      // 유튜브에 업로드된 영상이 있는 날
-      ytMatches.forEach((yt,i)=>{
-        t1+=`<tr><td><span class="week-label last">지난주</span></td><td>${fmt(d)}</td><td contenteditable="true">${yt.title}</td><td contenteditable="true">${i===0?(sch?.studioRecord||''):''}</td><td contenteditable="true">${yt.views||''}</td></tr>`;
+    addLog('API 호출 중: ?action=all');
+    const r=await fetch(GAS_URL+'?action=all');
+    const data=await r.json();
+    addLog('API 응답 수신 완료','ok');
+    
+    // 일정표 처리
+    if(data.schedule&&data.schedule.success){
+      const rows=data.schedule.rows||[];
+      addLog(`일정표: 총 ${rows.length}개 행 수신`);
+      const yr=S.baseDate.getFullYear();
+      rows.forEach(row=>{
+        row._date=new Date(yr,row.month-1,row.day);
+        row.uploadItem=clean(row.uploadItem);
+        row.studioRecord=clean(row.studioRecord);
+        row.note=clean(row.note);
+        row.performer=clean(row.performer);
       });
-    }else if(sch&&(sch.uploadItem||sch.studioRecord)){
-      // 유튜브 영상은 없지만 일정표에 데이터가 있는 날
-      t1+=`<tr><td><span class="week-label last">지난주</span></td><td>${fmt(d)}</td><td contenteditable="true">${sch.uploadItem||''}</td><td contenteditable="true">${sch.studioRecord||''}</td><td contenteditable="true"></td></tr>`;
+      S.lastSch=rows.filter(r=>inRange(r._date,S.lws,S.lwe));
+      S.thisSch=rows.filter(r=>inRange(r._date,S.tws,S.twe));
+      addLog(`지난주 일정: ${S.lastSch.length}건, 이번주 일정: ${S.thisSch.length}건`,'ok');
+      toast(`일정표: 지난주 ${S.lastSch.length}건 / 이번주 ${S.thisSch.length}건`,'success');
     }else{
-      // 아무 데이터도 없는 날
-      t1+=`<tr><td><span class="week-label last">지난주</span></td><td>${fmt(d)}</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>`;
+      addLog('일정표 수집 실패: '+(data.schedule?.error||'알 수 없음'),'err');
+      toast('일정표 수집 실패','error');
     }
-  });
-
-  // 이번주: 일정표에서 가져오기
-  getDaysInRange(STATE.thisWeekStart,STATE.thisWeekEnd).forEach(d=>{
-    const sch=STATE.thisWeekSchedule.find(s=>s.date&&sameDay(s.date,d));
-    t1+=`<tr><td><span class="week-label this">이번주</span></td><td>${fmt(d)}</td><td contenteditable="true">${sch?.uploadItem||''}</td><td contenteditable="true">${sch?.studioRecord||''}</td><td contenteditable="true">-</td></tr>`;
-  });
-  t1+='</table>';
-
-  // ── 채널 현황 ──
-  let t2=`<h3 class="mt-4">👥 채널 현황</h3><p style="font-size:16px;color:#60a5fa;margin:8px 0">구독자: <b contenteditable="true" id="prevSubsDisplay">${STATE.currentSubs||'___'}</b>명 (${fmtFull(STATE.baseDate)} 기준)</p>`;
-
-  // ── TABLE 3 ──
-  const cs=STATE.channelStats;
-  let t3=`<h3 class="mt-4">📊 채널 성과</h3><table class="report-table" id="table3"><tr><th>기간</th><th>조회수</th><th>구독자</th><th>수익</th><th>CPM</th><th>RPM</th><th>클릭률</th><th>평균시청시간</th></tr>`;
-  t3+=`<tr><td contenteditable="true">전전주</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>`;
-  t3+=`<tr><td contenteditable="true">전주</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>`;
-  t3+=`<tr style="background:rgba(59,130,246,.08)"><td contenteditable="true">${cs.period||thisLabel}</td><td contenteditable="true">${cs.views||''}</td><td contenteditable="true">${cs.subs||''}</td><td contenteditable="true">${cs.revenue||''}</td><td contenteditable="true">${cs.cpm||''}</td><td contenteditable="true">${cs.rpm||''}</td><td contenteditable="true">${cs.ctr||''}</td><td contenteditable="true">${cs.avgWatch||''}</td></tr></table>`;
-
-  // ── TABLE 4 ──
-  const ct=STATE.contentType;
-  let t4=`<h3 class="mt-4">📺 콘텐츠 유형별</h3><table class="report-table" id="table4"><tr><th>기간</th><th>구분</th><th>조회수</th><th>조회수비율</th><th>시청시간</th><th>시청시간비율</th></tr>`;
-  t4+=`<tr><td contenteditable="true" rowspan="2">전전주</td><td>동영상</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr><tr><td>쇼츠</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>`;
-  t4+=`<tr><td contenteditable="true" rowspan="2">전주</td><td>동영상</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr><tr><td>쇼츠</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>`;
-  t4+=`<tr style="background:rgba(59,130,246,.08)"><td contenteditable="true" rowspan="2">${ct.period||thisLabel}</td><td>동영상</td><td contenteditable="true">${ct.vid_views||''}</td><td contenteditable="true">${ct.vid_views_pct?ct.vid_views_pct+'%':''}</td><td contenteditable="true">${ct.vid_watch||''}</td><td contenteditable="true">${ct.vid_watch_pct?ct.vid_watch_pct+'%':''}</td></tr>`;
-  t4+=`<tr style="background:rgba(59,130,246,.08)"><td>쇼츠</td><td contenteditable="true">${ct.short_views||''}</td><td contenteditable="true">${ct.short_views_pct?ct.short_views_pct+'%':''}</td><td contenteditable="true">${ct.short_watch||''}</td><td contenteditable="true">${ct.short_watch_pct?ct.short_watch_pct+'%':''}</td></tr></table>`;
-
-  let t5=`<h3 class="mt-4">📝 팀원 특이사항</h3><p><b>양영은:</b> <span contenteditable="true">${STATE.noteYang||'없음'}</span></p><p><b>최건일:</b> <span contenteditable="true">${STATE.noteChoi||'없음'}</span></p>`;
-
-  area.innerHTML=t1+t2+t3+t4+t5;
+    
+    // 유튜브 처리
+    if(data.youtube&&data.youtube.success){
+      const vids=data.youtube.videos||[];
+      addLog(`유튜브: 총 ${vids.length}개 영상 수신`);
+      vids.forEach(v=>{v._date=new Date(v.published);v.title=clean(v.title)});
+      S.yt=vids.filter(v=>inRange(v._date,S.lws,S.lwe));
+      S.yt.sort((a,b)=>a._date-b._date);
+      addLog(`지난주 영상: ${S.yt.length}건`,'ok');
+      toast(`유튜브: 지난주 ${S.yt.length}건`,'success');
+    }else{
+      addLog('유튜브 수집 실패: '+(data.youtube?.error||'알 수 없음'),'err');
+      toast('유튜브 수집 실패','error');
+    }
+  }catch(e){
+    addLog('API 호출 오류: '+e.message,'err');
+    toast('데이터 수집 오류','error');
+  }
+  
+  document.getElementById('s2load').classList.add('hidden');
+  document.getElementById('s2result').classList.remove('hidden');
+  renderS2();
 }
 
-// ============================================================
-// DOCX
-// ============================================================
-async function generateDocx(){
-  toast('문서 생성 중...','info');
-  const{Document,Packer,Paragraph,Table,TableRow,TableCell,TextRun,WidthType,AlignmentType,HeadingLevel}=docx;
-  const lastLabel=`${STATE.lastWeekStart.getMonth()+1}월 ${getWeekOfMonth(STATE.lastWeekStart)}주차`;
-  const thisLabel=`${STATE.thisWeekStart.getMonth()+1}월 ${getWeekOfMonth(STATE.thisWeekStart)}주차`;
-  function cell(t,o={}){return new TableCell({children:[new Paragraph({children:[new TextRun({text:t||'',size:o.size||20,bold:o.bold||false,font:'맑은 고딕'})],alignment:o.align||AlignmentType.LEFT})],width:o.width?{size:o.width,type:WidthType.DXA}:undefined,shading:o.shading?{fill:o.shading}:undefined,rowSpan:o.rowSpan})}
-  function hc(t,w){return cell(t,{bold:true,shading:'D9E2F3',width:w,size:18})}
-  function readT(id){const t=document.getElementById(id);if(!t)return[];const r=[];t.querySelectorAll('tr').forEach(tr=>{const c=[];tr.querySelectorAll('th,td').forEach(td=>c.push(td.innerText.trim()));r.push(c)});return r}
-  const t1D=readT('table1'),t3D=readT('table3'),t4D=readT('table4');
-  const mk=(data,w)=>data.map((r,i)=>{if(i===0)return new TableRow({children:r.map(h=>hc(h,w)),tableHeader:true});return new TableRow({children:r.map(c=>cell(c))})});
-  const sub=document.getElementById('prevSubsDisplay')?.innerText||STATE.currentSubs||'___';
-  const doc=new Document({sections:[{children:[
-    new Paragraph({children:[new TextRun({text:`머니올라 ${lastLabel} 실적 및 ${thisLabel} 계획`,bold:true,size:32,font:'맑은 고딕'})],heading:HeadingLevel.HEADING_1,spacing:{after:300}}),
-    new Paragraph({children:[new TextRun({text:'■ 업로드 및 예정 아이템',bold:true,size:24,font:'맑은 고딕'})],spacing:{before:400,after:200}}),
-    ...(t1D.length>0?[new Table({rows:mk(t1D,1800),width:{size:100,type:WidthType.PERCENTAGE}})]:[]),
-    new Paragraph({children:[new TextRun({text:'■ 채널 현황',bold:true,size:24,font:'맑은 고딕'})],spacing:{before:400,after:100}}),
-    new Paragraph({children:[new TextRun({text:`구독자: ${sub}명 (${fmtFull(STATE.baseDate)} 기준)`,size:22,font:'맑은 고딕'})],spacing:{after:200}}),
-    new Paragraph({children:[new TextRun({text:'■ 채널 성과',bold:true,size:24,font:'맑은 고딕'})],spacing:{before:400,after:200}}),
-    ...(t3D.length>0?[new Table({rows:mk(t3D,1200),width:{size:100,type:WidthType.PERCENTAGE}})]:[]),
-    new Paragraph({children:[new TextRun({text:'■ 콘텐츠 유형별',bold:true,size:24,font:'맑은 고딕'})],spacing:{before:400,after:200}}),
-    ...(t4D.length>0?[new Table({rows:mk(t4D,1500),width:{size:100,type:WidthType.PERCENTAGE}})]:[]),
-    new Paragraph({children:[new TextRun({text:'■ 팀원 특이사항',bold:true,size:24,font:'맑은 고딕'})],spacing:{before:400,after:100}}),
-    new Paragraph({children:[new TextRun({text:`양영은: ${STATE.noteYang||'없음'}`,size:20,font:'맑은 고딕'})]}),
-    new Paragraph({children:[new TextRun({text:`최건일: ${STATE.noteChoi||'없음'}`,size:20,font:'맑은 고딕'})]}),
-  ]}]});
-  try{const blob=await Packer.toBlob(doc);const m=STATE.thisWeekStart.getMonth()+1,w=getWeekOfMonth(STATE.thisWeekStart);const fn=`머니올라_${m}월_${w}주차_보고.docx`;saveAs(blob,fn);toast(`✅ ${fn} 다운로드!`,'success')}catch(e){console.error(e);toast('문서 생성 오류: '+e.message,'error')}
+function renderS2(){
+  // 유튜브
+  const yd=document.getElementById('ytR');
+  if(!S.yt.length){yd.innerHTML='<p class="ts tm">수집된 영상이 없습니다.</p>'}
+  else{let h='<table class="tbl"><tr><th>날짜</th><th>제목</th><th>조회수</th></tr>';
+    S.yt.forEach(v=>{h+=`<tr><td>${fmt(v._date)}</td><td>${v.title}</td><td>${Number(v.views).toLocaleString()}</td></tr>`});
+    h+='</table>';yd.innerHTML=h}
+  
+  // 지난주 일정
+  const ld=document.getElementById('schLast');
+  if(!S.lastSch.length){ld.innerHTML='<p class="ts tm">수집된 일정이 없습니다.</p>'}
+  else{let h='<table class="tbl"><tr><th>날짜</th><th>업로드 아이템</th><th>스튜디오 녹화</th><th>특이사항</th></tr>';
+    S.lastSch.forEach(r=>{h+=`<tr><td>${r.dateStr}</td><td>${r.uploadItem||'-'}</td><td>${r.studioRecord||'-'}</td><td>${r.note||'-'}</td></tr>`});
+    h+='</table>';ld.innerHTML=h}
+  
+  // 이번주 일정
+  const td=document.getElementById('schThis');
+  if(!S.thisSch.length){td.innerHTML='<p class="ts tm">수집된 일정이 없습니다.</p>'}
+  else{let h='<table class="tbl"><tr><th>날짜</th><th>업로드 아이템</th><th>스튜디오 녹화</th><th>특이사항</th></tr>';
+    S.thisSch.forEach(r=>{h+=`<tr><td>${r.dateStr}</td><td>${r.uploadItem||'-'}</td><td>${r.studioRecord||'-'}</td><td>${r.note||'-'}</td></tr>`});
+    h+='</table>';td.innerHTML=h}
+}
+
+// Step 3
+document.getElementById('chImg').addEventListener('change',e=>{const f=e.target.files[0];if(f){const img=document.getElementById('chImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden')}});
+function saveS3(){S.ch={period:document.getElementById('ch_period').value||'최근 28일',views:document.getElementById('ch_views').value,subs:document.getElementById('ch_subs').value,rev:document.getElementById('ch_rev').value,cpm:document.getElementById('ch_cpm').value,rpm:document.getElementById('ch_rpm').value,ctr:document.getElementById('ch_ctr').value,avg:document.getElementById('ch_avg').value};toast('채널 현황 저장됨','success')}
+
+// Step 4
+document.getElementById('ctImg').addEventListener('change',e=>{const f=e.target.files[0];if(f){const img=document.getElementById('ctImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden')}});
+function saveS4(){S.ct={period:document.getElementById('ct_period').value||'최근 28일',vv:document.getElementById('ct_vv').value,vvp:document.getElementById('ct_vvp').value,vw:document.getElementById('ct_vw').value,vwp:document.getElementById('ct_vwp').value,sv:document.getElementById('ct_sv').value,svp:document.getElementById('ct_svp').value,sw:document.getElementById('ct_sw').value,swp:document.getElementById('ct_swp').value};toast('콘텐츠 유형 저장됨','success')}
+
+// Step 5
+document.getElementById('todayL').textContent=(()=>{const d=new Date();return`${d.getMonth()+1}/${d.getDate()} ${DK[d.getDay()]}요일`})();
+function saveS5(){S.subs=document.getElementById('curSubs').value;S.nY=document.getElementById('noteY').value;S.nC=document.getElementById('noteC').value;toast('저장됨','success')}
+
+// Step 6 Preview
+function buildPreview(){
+  const a=document.getElementById('prevArea');
+  let h='';
+  
+  // 테이블 1: 업로드 일정
+  h+=`<h3>📌 업로드 및 예정 아이템</h3><table class="tbl" id="t1"><tr><th>구분</th><th>날짜</th><th>업로드 아이템</th><th>스튜디오 녹화</th><th>조회수</th></tr>`;
+  
+  daysIn(S.lws,S.lwe).forEach(d=>{
+    const sch=S.lastSch.find(s=>sameDay(s._date,d));
+    const yts=S.yt.filter(v=>sameDay(v._date,d));
+    if(yts.length){
+      yts.forEach((v,i)=>{h+=`<tr><td><span class="wl last">지난주</span></td><td>${fmt(d)}</td><td contenteditable="true">${v.title}</td><td contenteditable="true">${i===0?(sch?.studioRecord||''):''}</td><td contenteditable="true">${Number(v.views).toLocaleString()}</td></tr>`});
+    }else if(sch&&(sch.uploadItem||sch.studioRecord)){
+      h+=`<tr><td><span class="wl last">지난주</span></td><td>${fmt(d)}</td><td contenteditable="true">${sch.uploadItem||''}</td><td contenteditable="true">${sch.studioRecord||''}</td><td contenteditable="true"></td></tr>`;
+    }else{
+      h+=`<tr><td><span class="wl last">지난주</span></td><td>${fmt(d)}</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>`;
+    }
+  });
+  
+  daysIn(S.tws,S.twe).forEach(d=>{
+    const sch=S.thisSch.find(s=>sameDay(s._date,d));
+    h+=`<tr><td><span class="wl this">이번주</span></td><td>${fmt(d)}</td><td contenteditable="true">${sch?.uploadItem||''}</td><td contenteditable="true">${sch?.studioRecord||''}</td><td contenteditable="true">-</td></tr>`;
+  });
+  h+='</table>';
+  
+  // 채널 현황
+  h+=`<h3 class="mt4">📊 채널 현황 (${S.ch.period||''})</h3>`;
+  h+=`<p style="font-size:16px;color:#60a5fa;margin:8px 0">구독자: <b contenteditable="true">${S.subs||''}</b></p>`;
+  h+=`<table class="tbl"><tr><th>항목</th><th>값</th></tr>`;
+  h+=`<tr><td>조회수</td><td contenteditable="true">${S.ch.views||''}</td></tr>`;
+  h+=`<tr><td>구독자 변화</td><td contenteditable="true">${S.ch.subs||''}</td></tr>`;
+  h+=`<tr><td>수익</td><td contenteditable="true">${S.ch.rev||''}</td></tr>`;
+  h+=`<tr><td>CPM</td><td contenteditable="true">${S.ch.cpm||''}</td></tr>`;
+  h+=`<tr><td>RPM</td><td contenteditable="true">${S.ch.rpm||''}</td></tr>`;
+  h+=`<tr><td>클릭률</td><td contenteditable="true">${S.ch.ctr||''}</td></tr>`;
+  h+=`<tr><td>평균 시청시간</td><td contenteditable="true">${S.ch.avg||''}</td></tr>`;
+  h+='</table>';
+  
+  // 콘텐츠 유형
+  h+=`<h3 class="mt4">📺 콘텐츠 유형 (${S.ct.period||''})</h3>`;
+  h+=`<table class="tbl"><tr><th>유형</th><th>조회수</th><th>비율</th><th>시청시간</th><th>비율</th></tr>`;
+  h+=`<tr><td>동영상</td><td contenteditable="true">${S.ct.vv||''}</td><td contenteditable="true">${S.ct.vvp||''}</td><td contenteditable="true">${S.ct.vw||''}</td><td contenteditable="true">${S.ct.vwp||''}</td></tr>`;
+  h+=`<tr><td>Shorts</td><td contenteditable="true">${S.ct.sv||''}</td><td contenteditable="true">${S.ct.svp||''}</td><td contenteditable="true">${S.ct.sw||''}</td><td contenteditable="true">${S.ct.swp||''}</td></tr>`;
+  h+='</table>';
+  
+  // 팀원 메모
+  h+=`<h3 class="mt4">👥 팀원 특이사항</h3>`;
+  h+=`<table class="tbl"><tr><th>팀원</th><th>내용</th></tr>`;
+  h+=`<tr><td>양영은</td><td contenteditable="true">${S.nY||'없음'}</td></tr>`;
+  h+=`<tr><td>최건일</td><td contenteditable="true">${S.nC||'없음'}</td></tr>`;
+  h+='</table>';
+  
+  a.innerHTML=h;
+}
+
+// DOCX 생성
+function genDocx(){
+  const{Document,Packer,Paragraph,Table,TableRow,TableCell,TextRun,WidthType,AlignmentType,BorderStyle,HeadingLevel}=docx;
+  const mon=S.tws.getMonth()+1;
+  const wk=weekOfMonth(S.tws);
+  
+  // 테이블에서 편집된 데이터 읽기
+  const t1=document.getElementById('t1');
+  const t1rows=[];
+  if(t1){t1.querySelectorAll('tr').forEach((tr,i)=>{if(i===0)return;const cells=tr.querySelectorAll('td');t1rows.push({label:cells[0]?.innerText||'',date:cells[1]?.innerText||'',item:cells[2]?.innerText||'',studio:cells[3]?.innerText||'',views:cells[4]?.innerText||''})})}
+  
+  const bdr={top:{style:BorderStyle.SINGLE,size:1,color:'999999'},bottom:{style:BorderStyle.SINGLE,size:1,color:'999999'},left:{style:BorderStyle.SINGLE,size:1,color:'999999'},right:{style:BorderStyle.SINGLE,size:1,color:'999999'}};
+  function c(text,bold){return new TableCell({borders:bdr,children:[new Paragraph({children:[new TextRun({text:text||'',bold:!!bold,size:20,font:'Noto Sans KR'})]})]})}
+  
+  const children=[];
+  children.push(new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:`머니올라 ${mon}월 ${wk}주차 주간 보고`,bold:true,size:32,font:'Noto Sans KR'})]}));
+  children.push(new Paragraph({children:[new TextRun({text:`보고일: ${fmt(S.tws)} | 작성자: 머니올라팀`,size:20,color:'666666',font:'Noto Sans KR'})]}));
+  children.push(new Paragraph({text:''}));
+  
+  // 업로드 일정 테이블
+  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'업로드 및 예정 아이템',bold:true,size:26,font:'Noto Sans KR'})]}));
+  const hdr=new TableRow({children:[c('구분',true),c('날짜',true),c('업로드 아이템',true),c('스튜디오 녹화',true),c('조회수',true)]});
+  const drows=t1rows.map(r=>new TableRow({children:[c(r.label),c(r.date),c(r.item),c(r.studio),c(r.views)]}));
+  children.push(new Table({rows:[hdr,...drows],width:{size:100,type:WidthType.PERCENTAGE}}));
+  children.push(new Paragraph({text:''}));
+  
+  // 채널 현황
+  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:`채널 현황 (${S.ch.period||''})`,bold:true,size:26,font:'Noto Sans KR'})]}));
+  children.push(new Paragraph({children:[new TextRun({text:`구독자: ${S.subs||''}`,bold:true,size:22,font:'Noto Sans KR'})]}));
+  const chItems=[['조회수',S.ch.views],['구독자 변화',S.ch.subs],['수익',S.ch.rev],['CPM',S.ch.cpm],['RPM',S.ch.rpm],['클릭률',S.ch.ctr],['평균 시청시간',S.ch.avg]];
+  const chRows=[new TableRow({children:[c('항목',true),c('값',true)]}),...chItems.map(x=>new TableRow({children:[c(x[0]),c(x[1])]}))];
+  children.push(new Table({rows:chRows,width:{size:100,type:WidthType.PERCENTAGE}}));
+  children.push(new Paragraph({text:''}));
+  
+  // 콘텐츠 유형
+  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:`콘텐츠 유형 (${S.ct.period||''})`,bold:true,size:26,font:'Noto Sans KR'})]}));
+  children.push(new Table({rows:[
+    new TableRow({children:[c('유형',true),c('조회수',true),c('비율',true),c('시청시간',true),c('비율',true)]}),
+    new TableRow({children:[c('동영상'),c(S.ct.vv),c(S.ct.vvp),c(S.ct.vw),c(S.ct.vwp)]}),
+    new TableRow({children:[c('Shorts'),c(S.ct.sv),c(S.ct.svp),c(S.ct.sw),c(S.ct.swp)]})
+  ],width:{size:100,type:WidthType.PERCENTAGE}}));
+  children.push(new Paragraph({text:''}));
+  
+  // 팀원 메모
+  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'팀원 특이사항',bold:true,size:26,font:'Noto Sans KR'})]}));
+  children.push(new Table({rows:[
+    new TableRow({children:[c('팀원',true),c('내용',true)]}),
+    new TableRow({children:[c('양영은'),c(S.nY||'없음')]}),
+    new TableRow({children:[c('최건일'),c(S.nC||'없음')]})
+  ],width:{size:100,type:WidthType.PERCENTAGE}}));
+  
+  const doc=new Document({sections:[{children}]});
+  Packer.toBlob(doc).then(blob=>{
+    saveAs(blob,`머니올라_${mon}월_${wk}주차_보고.docx`);
+    toast('문서가 생성되었습니다!','success');
+  }).catch(e=>{toast('문서 생성 오류: '+e.message,'error')});
 }
 </script>
 </body>
