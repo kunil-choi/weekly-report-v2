@@ -98,22 +98,21 @@ label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:blo
 <!-- STEP 3 -->
 <div class="panel" id="step3"><div class="card">
 <h2>📊 채널 현황</h2><p class="sub">유튜브 스튜디오 → 채널 분석 스크린샷 업로드 후 데이터를 입력하세요.</p>
-<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">이미지 업로드</div><input type="file" accept="image/*" id="chImg"></div>
+<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">채널 현황 이미지 업로드</div><input type="file" accept="image/*" id="chImg"></div>
 <img id="chImgP" class="img-preview hidden">
 <h3>채널 성과 데이터</h3>
 <div class="flex fw g2">
-<div class="fg" style="flex:1;min-width:140px"><label>기간</label><input type="text" id="ch_period" placeholder="최근 28일"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>조회수</label><input type="text" id="ch_views" placeholder="1,234,567"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>구독자 변화</label><input type="text" id="ch_subs" placeholder="+320"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>조회수</label><input type="text" id="ch_views" placeholder="예: 1,950,015"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>구독자 변화</label><input type="text" id="ch_subs" placeholder="예: +3,234"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>예상 수익 (원)</label><input type="text" id="ch_rev" placeholder="예: ₩5,235,513"></div>
 </div>
 <div class="flex fw g2">
-<div class="fg" style="flex:1;min-width:140px"><label>수익 (원)</label><input type="text" id="ch_rev" placeholder="2,500,000"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>CPM</label><input type="text" id="ch_cpm" placeholder="3,200"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>RPM</label><input type="text" id="ch_rpm" placeholder="1,800"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>재생 기반 CPM</label><input type="text" id="ch_cpm" placeholder="예: ₩6,414"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>RPM</label><input type="text" id="ch_rpm" placeholder="예: ₩2,911"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>노출 클릭률(%)</label><input type="text" id="ch_ctr" placeholder="예: 5.7%"></div>
 </div>
 <div class="flex fw g2">
-<div class="fg" style="flex:1;min-width:140px"><label>클릭률(%)</label><input type="text" id="ch_ctr" placeholder="5.2"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>평균 시청시간</label><input type="text" id="ch_avg" placeholder="4:32"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>평균 시청 지속시간</label><input type="text" id="ch_avg" placeholder="예: 9:18"></div>
 </div>
 <div class="nav-row"><button class="btn btn-s" onclick="go(2)">← 이전</button><button class="btn btn-p" onclick="saveS3();go(4)">다음 →</button></div>
 </div></div>
@@ -121,22 +120,29 @@ label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:blo
 <!-- STEP 4 -->
 <div class="panel" id="step4"><div class="card">
 <h2>📺 콘텐츠 유형별</h2><p class="sub">콘텐츠 유형별 분석 스크린샷 업로드 후 데이터를 입력하세요.</p>
-<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">이미지 업로드</div><input type="file" accept="image/*" id="ctImg"></div>
+<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">콘텐츠 유형 이미지 업로드</div><input type="file" accept="image/*" id="ctImg"></div>
 <img id="ctImgP" class="img-preview hidden">
-<div class="fg" style="max-width:300px"><label>기간</label><input type="text" id="ct_period" placeholder="최근 28일"></div>
+<h3>전체</h3>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:140px"><label>총 조회수</label><input type="text" id="ct_total_views" placeholder="예: 1,950,015"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>총 시청시간(시간)</label><input type="text" id="ct_total_watch" placeholder="예: 267,424.4"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>평균 시청 지속시간</label><input type="text" id="ct_total_avg" placeholder="예: 9:18"></div>
+</div>
 <h3>동영상</h3>
 <div class="flex fw g2">
-<div class="fg" style="flex:1;min-width:120px"><label>조회수</label><input type="text" id="ct_vv"></div>
-<div class="fg" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_vvp"></div>
-<div class="fg" style="flex:1;min-width:120px"><label>시청시간</label><input type="text" id="ct_vw"></div>
-<div class="fg" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_vwp"></div>
+<div class="fg" style="flex:1;min-width:120px"><label>조회수</label><input type="text" id="ct_vv" placeholder="예: 1,565,244"></div>
+<div class="fg" style="flex:1;min-width:80px"><label>비율(%)</label><input type="text" id="ct_vvp" placeholder="80.3%"></div>
+<div class="fg" style="flex:1;min-width:120px"><label>시청시간(시간)</label><input type="text" id="ct_vw" placeholder="예: 264,590.1"></div>
+<div class="fg" style="flex:1;min-width:80px"><label>비율(%)</label><input type="text" id="ct_vwp" placeholder="98.9%"></div>
+<div class="fg" style="flex:1;min-width:100px"><label>평균 지속시간</label><input type="text" id="ct_va" placeholder="예: 10:17"></div>
 </div>
 <h3>Shorts</h3>
 <div class="flex fw g2">
-<div class="fg" style="flex:1;min-width:120px"><label>조회수</label><input type="text" id="ct_sv"></div>
-<div class="fg" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_svp"></div>
-<div class="fg" style="flex:1;min-width:120px"><label>시청시간</label><input type="text" id="ct_sw"></div>
-<div class="fg" style="flex:1;min-width:100px"><label>비율(%)</label><input type="text" id="ct_swp"></div>
+<div class="fg" style="flex:1;min-width:120px"><label>조회수</label><input type="text" id="ct_sv" placeholder="예: 380,601"></div>
+<div class="fg" style="flex:1;min-width:80px"><label>비율(%)</label><input type="text" id="ct_svp" placeholder="19.5%"></div>
+<div class="fg" style="flex:1;min-width:120px"><label>시청시간(시간)</label><input type="text" id="ct_sw" placeholder="예: 2,347.9"></div>
+<div class="fg" style="flex:1;min-width:80px"><label>비율(%)</label><input type="text" id="ct_swp" placeholder="0.9%"></div>
+<div class="fg" style="flex:1;min-width:100px"><label>평균 지속시간</label><input type="text" id="ct_sa" placeholder="예: 0:46"></div>
 </div>
 <div class="nav-row"><button class="btn btn-s" onclick="go(3)">← 이전</button><button class="btn btn-p" onclick="saveS4();go(5)">다음 →</button></div>
 </div></div>
@@ -144,7 +150,7 @@ label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:blo
 <!-- STEP 5 -->
 <div class="panel" id="step5"><div class="card">
 <h2>👥 구독자 & 팀원 메모</h2>
-<div class="fg"><label>현재 구독자 수 (<span id="todayL"></span>)</label><input type="text" id="curSubs" placeholder="533,443"></div>
+<div class="fg"><label>현재 구독자 수 (<span id="todayL"></span>)</label><input type="text" id="curSubs" placeholder="예: 533,443"></div>
 <h3>팀원 특이사항</h3>
 <div class="fg"><label>양영은</label><textarea id="noteY" placeholder="예: 이번 주 연차 (4/9)"></textarea></div>
 <div class="fg"><label>최건일</label><textarea id="noteC" placeholder="예: 없음"></textarea></div>
@@ -200,7 +206,6 @@ async function runStep2(){
     const data=await r.json();
     addLog('API 응답 수신 완료','ok');
     
-    // 일정표 처리
     if(data.schedule&&data.schedule.success){
       const rows=data.schedule.rows||[];
       addLog(`일정표: 총 ${rows.length}개 행 수신`);
@@ -221,7 +226,6 @@ async function runStep2(){
       toast('일정표 수집 실패','error');
     }
     
-    // 유튜브 처리
     if(data.youtube&&data.youtube.success){
       const vids=data.youtube.videos||[];
       addLog(`유튜브: 총 ${vids.length}개 영상 수신`);
@@ -245,21 +249,18 @@ async function runStep2(){
 }
 
 function renderS2(){
-  // 유튜브
   const yd=document.getElementById('ytR');
   if(!S.yt.length){yd.innerHTML='<p class="ts tm">수집된 영상이 없습니다.</p>'}
   else{let h='<table class="tbl"><tr><th>날짜</th><th>제목</th><th>조회수</th></tr>';
     S.yt.forEach(v=>{h+=`<tr><td>${fmt(v._date)}</td><td>${v.title}</td><td>${Number(v.views).toLocaleString()}</td></tr>`});
     h+='</table>';yd.innerHTML=h}
   
-  // 지난주 일정
   const ld=document.getElementById('schLast');
   if(!S.lastSch.length){ld.innerHTML='<p class="ts tm">수집된 일정이 없습니다.</p>'}
   else{let h='<table class="tbl"><tr><th>날짜</th><th>업로드 아이템</th><th>스튜디오 녹화</th><th>특이사항</th></tr>';
     S.lastSch.forEach(r=>{h+=`<tr><td>${r.dateStr}</td><td>${r.uploadItem||'-'}</td><td>${r.studioRecord||'-'}</td><td>${r.note||'-'}</td></tr>`});
     h+='</table>';ld.innerHTML=h}
   
-  // 이번주 일정
   const td=document.getElementById('schThis');
   if(!S.thisSch.length){td.innerHTML='<p class="ts tm">수집된 일정이 없습니다.</p>'}
   else{let h='<table class="tbl"><tr><th>날짜</th><th>업로드 아이템</th><th>스튜디오 녹화</th><th>특이사항</th></tr>';
@@ -269,11 +270,39 @@ function renderS2(){
 
 // Step 3
 document.getElementById('chImg').addEventListener('change',e=>{const f=e.target.files[0];if(f){const img=document.getElementById('chImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden')}});
-function saveS3(){S.ch={period:document.getElementById('ch_period').value||'최근 28일',views:document.getElementById('ch_views').value,subs:document.getElementById('ch_subs').value,rev:document.getElementById('ch_rev').value,cpm:document.getElementById('ch_cpm').value,rpm:document.getElementById('ch_rpm').value,ctr:document.getElementById('ch_ctr').value,avg:document.getElementById('ch_avg').value};toast('채널 현황 저장됨','success')}
+function saveS3(){
+  S.ch={
+    views:document.getElementById('ch_views').value,
+    subs:document.getElementById('ch_subs').value,
+    rev:document.getElementById('ch_rev').value,
+    cpm:document.getElementById('ch_cpm').value,
+    rpm:document.getElementById('ch_rpm').value,
+    ctr:document.getElementById('ch_ctr').value,
+    avg:document.getElementById('ch_avg').value
+  };
+  toast('채널 현황 저장됨','success');
+}
 
 // Step 4
 document.getElementById('ctImg').addEventListener('change',e=>{const f=e.target.files[0];if(f){const img=document.getElementById('ctImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden')}});
-function saveS4(){S.ct={period:document.getElementById('ct_period').value||'최근 28일',vv:document.getElementById('ct_vv').value,vvp:document.getElementById('ct_vvp').value,vw:document.getElementById('ct_vw').value,vwp:document.getElementById('ct_vwp').value,sv:document.getElementById('ct_sv').value,svp:document.getElementById('ct_svp').value,sw:document.getElementById('ct_sw').value,swp:document.getElementById('ct_swp').value};toast('콘텐츠 유형 저장됨','success')}
+function saveS4(){
+  S.ct={
+    totalViews:document.getElementById('ct_total_views').value,
+    totalWatch:document.getElementById('ct_total_watch').value,
+    totalAvg:document.getElementById('ct_total_avg').value,
+    vv:document.getElementById('ct_vv').value,
+    vvp:document.getElementById('ct_vvp').value,
+    vw:document.getElementById('ct_vw').value,
+    vwp:document.getElementById('ct_vwp').value,
+    va:document.getElementById('ct_va').value,
+    sv:document.getElementById('ct_sv').value,
+    svp:document.getElementById('ct_svp').value,
+    sw:document.getElementById('ct_sw').value,
+    swp:document.getElementById('ct_swp').value,
+    sa:document.getElementById('ct_sa').value
+  };
+  toast('콘텐츠 유형 저장됨','success');
+}
 
 // Step 5
 document.getElementById('todayL').textContent=(()=>{const d=new Date();return`${d.getMonth()+1}/${d.getDate()} ${DK[d.getDay()]}요일`})();
@@ -306,23 +335,24 @@ function buildPreview(){
   h+='</table>';
   
   // 채널 현황
-  h+=`<h3 class="mt4">📊 채널 현황 (${S.ch.period||''})</h3>`;
+  h+=`<h3 class="mt4">📊 채널 현황</h3>`;
   h+=`<p style="font-size:16px;color:#60a5fa;margin:8px 0">구독자: <b contenteditable="true">${S.subs||''}</b></p>`;
   h+=`<table class="tbl"><tr><th>항목</th><th>값</th></tr>`;
   h+=`<tr><td>조회수</td><td contenteditable="true">${S.ch.views||''}</td></tr>`;
   h+=`<tr><td>구독자 변화</td><td contenteditable="true">${S.ch.subs||''}</td></tr>`;
-  h+=`<tr><td>수익</td><td contenteditable="true">${S.ch.rev||''}</td></tr>`;
-  h+=`<tr><td>CPM</td><td contenteditable="true">${S.ch.cpm||''}</td></tr>`;
+  h+=`<tr><td>예상 수익</td><td contenteditable="true">${S.ch.rev||''}</td></tr>`;
+  h+=`<tr><td>재생 기반 CPM</td><td contenteditable="true">${S.ch.cpm||''}</td></tr>`;
   h+=`<tr><td>RPM</td><td contenteditable="true">${S.ch.rpm||''}</td></tr>`;
-  h+=`<tr><td>클릭률</td><td contenteditable="true">${S.ch.ctr||''}</td></tr>`;
-  h+=`<tr><td>평균 시청시간</td><td contenteditable="true">${S.ch.avg||''}</td></tr>`;
+  h+=`<tr><td>노출 클릭률</td><td contenteditable="true">${S.ch.ctr||''}</td></tr>`;
+  h+=`<tr><td>평균 시청 지속시간</td><td contenteditable="true">${S.ch.avg||''}</td></tr>`;
   h+='</table>';
   
   // 콘텐츠 유형
-  h+=`<h3 class="mt4">📺 콘텐츠 유형 (${S.ct.period||''})</h3>`;
-  h+=`<table class="tbl"><tr><th>유형</th><th>조회수</th><th>비율</th><th>시청시간</th><th>비율</th></tr>`;
-  h+=`<tr><td>동영상</td><td contenteditable="true">${S.ct.vv||''}</td><td contenteditable="true">${S.ct.vvp||''}</td><td contenteditable="true">${S.ct.vw||''}</td><td contenteditable="true">${S.ct.vwp||''}</td></tr>`;
-  h+=`<tr><td>Shorts</td><td contenteditable="true">${S.ct.sv||''}</td><td contenteditable="true">${S.ct.svp||''}</td><td contenteditable="true">${S.ct.sw||''}</td><td contenteditable="true">${S.ct.swp||''}</td></tr>`;
+  h+=`<h3 class="mt4">📺 콘텐츠 유형별 실적</h3>`;
+  h+=`<table class="tbl"><tr><th>유형</th><th>조회수</th><th>비율</th><th>시청시간</th><th>비율</th><th>평균 지속시간</th></tr>`;
+  h+=`<tr><td><b>전체</b></td><td contenteditable="true">${S.ct.totalViews||''}</td><td>100%</td><td contenteditable="true">${S.ct.totalWatch||''}</td><td>100%</td><td contenteditable="true">${S.ct.totalAvg||''}</td></tr>`;
+  h+=`<tr><td>동영상</td><td contenteditable="true">${S.ct.vv||''}</td><td contenteditable="true">${S.ct.vvp||''}</td><td contenteditable="true">${S.ct.vw||''}</td><td contenteditable="true">${S.ct.vwp||''}</td><td contenteditable="true">${S.ct.va||''}</td></tr>`;
+  h+=`<tr><td>Shorts</td><td contenteditable="true">${S.ct.sv||''}</td><td contenteditable="true">${S.ct.svp||''}</td><td contenteditable="true">${S.ct.sw||''}</td><td contenteditable="true">${S.ct.swp||''}</td><td contenteditable="true">${S.ct.sa||''}</td></tr>`;
   h+='</table>';
   
   // 팀원 메모
@@ -337,11 +367,10 @@ function buildPreview(){
 
 // DOCX 생성
 function genDocx(){
-  const{Document,Packer,Paragraph,Table,TableRow,TableCell,TextRun,WidthType,AlignmentType,BorderStyle,HeadingLevel}=docx;
+  const{Document,Packer,Paragraph,Table,TableRow,TableCell,TextRun,WidthType,BorderStyle,HeadingLevel}=docx;
   const mon=S.tws.getMonth()+1;
   const wk=weekOfMonth(S.tws);
   
-  // 테이블에서 편집된 데이터 읽기
   const t1=document.getElementById('t1');
   const t1rows=[];
   if(t1){t1.querySelectorAll('tr').forEach((tr,i)=>{if(i===0)return;const cells=tr.querySelectorAll('td');t1rows.push({label:cells[0]?.innerText||'',date:cells[1]?.innerText||'',item:cells[2]?.innerText||'',studio:cells[3]?.innerText||'',views:cells[4]?.innerText||''})})}
@@ -351,35 +380,36 @@ function genDocx(){
   
   const children=[];
   children.push(new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:`머니올라 ${mon}월 ${wk}주차 주간 보고`,bold:true,size:32,font:'Noto Sans KR'})]}));
-  children.push(new Paragraph({children:[new TextRun({text:`보고일: ${fmt(S.tws)} | 작성자: 머니올라팀`,size:20,color:'666666',font:'Noto Sans KR'})]}));
+  children.push(new Paragraph({children:[new TextRun({text:`보고일: ${fmt(S.tws)} | 지난주: ${fmt(S.lws)}~${fmt(S.lwe)}`,size:20,color:'666666',font:'Noto Sans KR'})]}));
   children.push(new Paragraph({text:''}));
   
-  // 업로드 일정 테이블
-  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'업로드 및 예정 아이템',bold:true,size:26,font:'Noto Sans KR'})]}));
+  // 업로드 일정
+  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'■ 업로드 및 예정 아이템',bold:true,size:26,font:'Noto Sans KR'})]}));
   const hdr=new TableRow({children:[c('구분',true),c('날짜',true),c('업로드 아이템',true),c('스튜디오 녹화',true),c('조회수',true)]});
   const drows=t1rows.map(r=>new TableRow({children:[c(r.label),c(r.date),c(r.item),c(r.studio),c(r.views)]}));
   children.push(new Table({rows:[hdr,...drows],width:{size:100,type:WidthType.PERCENTAGE}}));
   children.push(new Paragraph({text:''}));
   
   // 채널 현황
-  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:`채널 현황 (${S.ch.period||''})`,bold:true,size:26,font:'Noto Sans KR'})]}));
+  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'■ 채널 현황',bold:true,size:26,font:'Noto Sans KR'})]}));
   children.push(new Paragraph({children:[new TextRun({text:`구독자: ${S.subs||''}`,bold:true,size:22,font:'Noto Sans KR'})]}));
-  const chItems=[['조회수',S.ch.views],['구독자 변화',S.ch.subs],['수익',S.ch.rev],['CPM',S.ch.cpm],['RPM',S.ch.rpm],['클릭률',S.ch.ctr],['평균 시청시간',S.ch.avg]];
+  const chItems=[['조회수',S.ch.views],['구독자 변화',S.ch.subs],['예상 수익',S.ch.rev],['재생 기반 CPM',S.ch.cpm],['RPM',S.ch.rpm],['노출 클릭률',S.ch.ctr],['평균 시청 지속시간',S.ch.avg]];
   const chRows=[new TableRow({children:[c('항목',true),c('값',true)]}),...chItems.map(x=>new TableRow({children:[c(x[0]),c(x[1])]}))];
   children.push(new Table({rows:chRows,width:{size:100,type:WidthType.PERCENTAGE}}));
   children.push(new Paragraph({text:''}));
   
   // 콘텐츠 유형
-  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:`콘텐츠 유형 (${S.ct.period||''})`,bold:true,size:26,font:'Noto Sans KR'})]}));
+  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'■ 콘텐츠 유형별 실적',bold:true,size:26,font:'Noto Sans KR'})]}));
   children.push(new Table({rows:[
-    new TableRow({children:[c('유형',true),c('조회수',true),c('비율',true),c('시청시간',true),c('비율',true)]}),
-    new TableRow({children:[c('동영상'),c(S.ct.vv),c(S.ct.vvp),c(S.ct.vw),c(S.ct.vwp)]}),
-    new TableRow({children:[c('Shorts'),c(S.ct.sv),c(S.ct.svp),c(S.ct.sw),c(S.ct.swp)]})
+    new TableRow({children:[c('유형',true),c('조회수',true),c('비율',true),c('시청시간',true),c('비율',true),c('평균 지속시간',true)]}),
+    new TableRow({children:[c('전체',true),c(S.ct.totalViews),c('100%'),c(S.ct.totalWatch),c('100%'),c(S.ct.totalAvg)]}),
+    new TableRow({children:[c('동영상'),c(S.ct.vv),c(S.ct.vvp),c(S.ct.vw),c(S.ct.vwp),c(S.ct.va)]}),
+    new TableRow({children:[c('Shorts'),c(S.ct.sv),c(S.ct.svp),c(S.ct.sw),c(S.ct.swp),c(S.ct.sa)]})
   ],width:{size:100,type:WidthType.PERCENTAGE}}));
   children.push(new Paragraph({text:''}));
   
   // 팀원 메모
-  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'팀원 특이사항',bold:true,size:26,font:'Noto Sans KR'})]}));
+  children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'■ 팀원 특이사항',bold:true,size:26,font:'Noto Sans KR'})]}));
   children.push(new Table({rows:[
     new TableRow({children:[c('팀원',true),c('내용',true)]}),
     new TableRow({children:[c('양영은'),c(S.nY||'없음')]}),
