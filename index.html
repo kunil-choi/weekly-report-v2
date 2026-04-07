@@ -155,7 +155,8 @@ label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:blo
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<!-- docx@7.7.0 이 브라우저 UMD에서 가장 안정적 -->
+<script src="https://cdn.jsdelivr.net/npm/docx@7.7.0/build/index.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 <script>
 var GAS_URL='https://script.google.com/macros/s/AKfycbwmtjpbT8g9dwr2FFIUyAvaRhCH9quBB_pFAiSYfoQXlfWwW8Qs32VXjIzf9itZgmkXgA/exec';
@@ -175,14 +176,13 @@ function clean(s){return(s||'').replace(/\\r/g,' ').replace(/\r/g,' ').replace(/
 function V(id){var el=document.getElementById(id);return el?el.value:''}
 function commaNum(n){return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')}
 
-// 구독자 수 자동 콤마
+/* 구독자 수 자동 콤마 */
 document.getElementById('curSubs').addEventListener('input',function(e){
   var v=e.target.value.replace(/[^0-9]/g,'');
-  if(v)e.target.value=commaNum(v);
-  else e.target.value='';
+  if(v)e.target.value=commaNum(v);else e.target.value='';
 });
 
-// Step 1
+/* ===== Step 1 ===== */
 document.getElementById('fi1').addEventListener('change',function(e){var f=e.target.files[0];if(f){document.getElementById('fn1').textContent='📎 '+f.name;toast('파일 선택됨','success')}});
 document.getElementById('btnStart').addEventListener('click',function(){
   var mv=document.getElementById('manDate').value;
@@ -193,7 +193,7 @@ document.getElementById('btnStart').addEventListener('click',function(){
   setTimeout(function(){go(2);runStep2()},500);
 });
 
-// Step 2
+/* ===== Step 2 ===== */
 function runStep2(){
   var st=document.getElementById('s2status');
   document.getElementById('s2log').innerHTML='';
@@ -207,21 +207,21 @@ function runStep2(){
       for(var i=0;i<rows.length;i++){rows[i]._date=new Date(yr,rows[i].month-1,rows[i].day);rows[i].uploadItem=clean(rows[i].uploadItem);rows[i].studioRecord=clean(rows[i].studioRecord);rows[i].note=clean(rows[i].note)}
       S.lastSch=rows.filter(function(r){return inRange(r._date,S.lws,S.lwe)});
       S.thisSch=rows.filter(function(r){return inRange(r._date,S.tws,S.twe)});
-      addLog('일정: 지난주 '+S.lastSch.length+'건, 이번주 '+S.thisSch.length+'건','ok');
+      addLog('일정: 전체 '+rows.length+'건 / 지난주 '+S.lastSch.length+'건, 이번주 '+S.thisSch.length+'건','ok');
       toast('일정표 수집 완료','success');
-    }else{addLog('일정표 실패','err')}
+    }else{addLog('일정표 실패: '+(data.schedule?data.schedule.error:'응답 없음'),'err')}
     if(data.youtube&&data.youtube.success){
       var vids=data.youtube.videos||[];
       for(var i=0;i<vids.length;i++){vids[i]._date=new Date(vids[i].published);vids[i].title=clean(vids[i].title)}
       S.yt=vids.filter(function(v){return inRange(v._date,S.lws,S.lwe)});
       S.yt.sort(function(a,b){return a._date-b._date});
-      addLog('유튜브: '+S.yt.length+'건','ok');
+      addLog('유튜브: 전체 '+vids.length+'건 / 지난주 '+S.yt.length+'건','ok');
       toast('유튜브 수집 완료','success');
     }else{addLog('유튜브 실패','err')}
     document.getElementById('s2load').classList.add('hidden');
     document.getElementById('s2result').classList.remove('hidden');
     renderS2();
-  }).catch(function(e){addLog('오류: '+e.message,'err');document.getElementById('s2load').classList.add('hidden');document.getElementById('s2result').classList.remove('hidden')});
+  }).catch(function(e){addLog('오류: '+e.message,'err');st.textContent='오류 발생';document.getElementById('s2load').classList.add('hidden');document.getElementById('s2result').classList.remove('hidden')});
 }
 function renderS2(){
   var yd=document.getElementById('ytR');
@@ -235,33 +235,36 @@ function renderS2(){
   else{var h='<table class="tbl"><tr><th>날짜</th><th>업로드</th><th>녹화</th><th>특이사항</th></tr>';for(var i=0;i<S.thisSch.length;i++){var r=S.thisSch[i];h+='<tr><td>'+r.dateStr+'</td><td>'+(r.uploadItem||'-')+'</td><td>'+(r.studioRecord||'-')+'</td><td>'+(r.note||'-')+'</td></tr>'}h+='</table>';td.innerHTML=h}
 }
 
-// Step 3
-document.getElementById('chImg').addEventListener('change',function(e){var f=e.target.files[0];if(f){var img=document.getElementById('chImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden')}});
+/* ===== Step 3 ===== */
+document.getElementById('chImg').addEventListener('change',function(e){var f=e.target.files[0];if(f){var img=document.getElementById('chImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden');toast('이미지 업로드됨 - 아래 필드에 수동 입력하세요','info')}});
 function saveS3(){
   S.ch={views:V('ch_views'),subs:V('ch_subs'),rev:V('ch_rev'),cpm:V('ch_cpm'),rpm:V('ch_rpm'),ctr:V('ch_ctr'),avg:V('ch_avg')};
   S.ch2={views:V('ch2_views'),subs:V('ch2_subs'),rev:V('ch2_rev'),cpm:V('ch2_cpm'),rpm:V('ch2_rpm'),ctr:V('ch2_ctr'),avg:V('ch2_avg')};
-  console.log('S3 saved',JSON.stringify(S.ch));
-  toast('채널 현황 저장','success');
+  console.log('saveS3',JSON.stringify(S.ch),JSON.stringify(S.ch2));
+  toast('채널 현황 저장됨','success');
 }
 
-// Step 4
-document.getElementById('ctImg').addEventListener('change',function(e){var f=e.target.files[0];if(f){var img=document.getElementById('ctImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden')}});
+/* ===== Step 4 ===== */
+document.getElementById('ctImg').addEventListener('change',function(e){var f=e.target.files[0];if(f){var img=document.getElementById('ctImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden');toast('이미지 업로드됨 - 아래 필드에 수동 입력하세요','info')}});
 function saveS4(){
   S.ct={tv:V('ct_tv'),tw:V('ct_tw'),ta:V('ct_ta'),vv:V('ct_vv'),vvp:V('ct_vvp'),vw:V('ct_vw'),vwp:V('ct_vwp'),va:V('ct_va'),sv:V('ct_sv'),svp:V('ct_svp'),sw:V('ct_sw'),swp:V('ct_swp'),sa:V('ct_sa')};
   S.ct2={tv:V('ct2_tv'),tw:V('ct2_tw'),ta:V('ct2_ta'),vv:V('ct2_vv'),vvp:V('ct2_vvp'),vw:V('ct2_vw'),vwp:V('ct2_vwp'),va:V('ct2_va'),sv:V('ct2_sv'),svp:V('ct2_svp'),sw:V('ct2_sw'),swp:V('ct2_swp'),sa:V('ct2_sa')};
-  console.log('S4 saved',JSON.stringify(S.ct));
-  toast('콘텐츠 유형 저장','success');
+  console.log('saveS4',JSON.stringify(S.ct),JSON.stringify(S.ct2));
+  toast('콘텐츠 유형 저장됨','success');
 }
 
-// Step 5
+/* ===== Step 5 ===== */
 document.getElementById('todayL').textContent=(function(){var d=new Date();return(d.getMonth()+1)+'/'+d.getDate()+' '+DK[d.getDay()]+'요일'})();
-function saveS5(){S.subs=V('curSubs');S.nY=V('noteY');S.nC=V('noteC');console.log('S5 saved',S.subs);toast('저장','success')}
+function saveS5(){S.subs=V('curSubs');S.nY=V('noteY');S.nC=V('noteC');console.log('saveS5',S.subs);toast('저장됨','success')}
 
-// Step 6
+/* ===== Step 6: 미리보기 ===== */
 function buildPreview(){
-  console.log('buildPreview',JSON.stringify(S.ch),JSON.stringify(S.ct));
+  console.log('buildPreview called');
+  console.log('S.ch=',JSON.stringify(S.ch));
+  console.log('S.ct=',JSON.stringify(S.ct));
   var a=document.getElementById('prevArea');var h='';
-  // 업로드 일정
+
+  /* 업로드 일정 */
   h+='<h3>📌 업로드 및 예정 아이템</h3><table class="tbl" id="t1"><tr><th>구분</th><th>날짜</th><th>업로드 아이템</th><th>스튜디오 녹화</th><th>조회수</th></tr>';
   var lwD=daysIn(S.lws,S.lwe);
   for(var di=0;di<lwD.length;di++){var d=lwD[di];var sch=null;for(var si=0;si<S.lastSch.length;si++){if(sameDay(S.lastSch[si]._date,d)){sch=S.lastSch[si];break}}var yts=[];for(var yi=0;yi<S.yt.length;yi++){if(sameDay(S.yt[yi]._date,d))yts.push(S.yt[yi])}
@@ -273,94 +276,144 @@ function buildPreview(){
     h+='<tr><td><span class="wl this">이번주</span></td><td>'+fmt(d)+'</td><td contenteditable="true">'+(sch?sch.uploadItem||'':'')+'</td><td contenteditable="true">'+(sch?sch.studioRecord||'':'')+'</td><td contenteditable="true">-</td></tr>'}
   h+='</table>';
 
-  // 채널 현황
+  /* 채널 현황 */
   var c2=!!(S.ch2.views||S.ch2.rev||S.ch2.cpm);
   h+='<h3 class="mt4">📊 채널 현황</h3>';
-  h+='<p style="font-size:16px;color:#60a5fa;margin:8px 0">현재 구독자: <b contenteditable="true">'+(S.subs||'')+'</b></p>';
+  h+='<p style="font-size:16px;color:#60a5fa;margin:8px 0">현재 구독자: <b contenteditable="true">'+(S.subs||'-')+'</b></p>';
   h+='<table class="tbl" id="t_ch"><tr><th>항목</th><th>이번주</th>'+(c2?'<th>지지난주</th>':'')+'</tr>';
   var cl=[['조회수','views'],['구독자 변화','subs'],['예상 수익','rev'],['재생 기반 CPM','cpm'],['RPM','rpm'],['노출 클릭률','ctr'],['평균 시청 지속시간','avg']];
-  for(var i=0;i<cl.length;i++){var k=cl[i][1];h+='<tr><td>'+cl[i][0]+'</td><td contenteditable="true">'+(S.ch[k]||'')+'</td>';if(c2)h+='<td contenteditable="true">'+(S.ch2[k]||'')+'</td>';h+='</tr>'}
+  for(var i=0;i<cl.length;i++){var k=cl[i][1];h+='<tr><td>'+cl[i][0]+'</td><td contenteditable="true">'+(S.ch[k]||'-')+'</td>';if(c2)h+='<td contenteditable="true">'+(S.ch2[k]||'-')+'</td>';h+='</tr>'}
   h+='</table>';
 
-  // 콘텐츠 유형
+  /* 콘텐츠 유형 */
   var ct2=!!(S.ct2.tv||S.ct2.vv);
   h+='<h3 class="mt4">📺 콘텐츠 유형별</h3>';
   if(ct2){
     h+='<table class="tbl" id="t_ct"><tr><th></th><th colspan="3" style="text-align:center;background:#1a3a5c">이번주</th><th colspan="3" style="text-align:center;background:#3a2a1a">지지난주</th></tr>';
     h+='<tr><th>유형</th><th>조회수</th><th>시청시간</th><th>평균 지속</th><th>조회수</th><th>시청시간</th><th>평균 지속</th></tr>';
-    h+='<tr><td><b>전체</b></td><td contenteditable="true">'+(S.ct.tv||'')+'</td><td contenteditable="true">'+(S.ct.tw||'')+'</td><td contenteditable="true">'+(S.ct.ta||'')+'</td><td contenteditable="true">'+(S.ct2.tv||'')+'</td><td contenteditable="true">'+(S.ct2.tw||'')+'</td><td contenteditable="true">'+(S.ct2.ta||'')+'</td></tr>';
-    h+='<tr><td>동영상</td><td contenteditable="true">'+(S.ct.vv||'')+' '+(S.ct.vvp||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+' '+(S.ct.vwp||'')+'</td><td contenteditable="true">'+(S.ct.va||'')+'</td><td contenteditable="true">'+(S.ct2.vv||'')+' '+(S.ct2.vvp||'')+'</td><td contenteditable="true">'+(S.ct2.vw||'')+' '+(S.ct2.vwp||'')+'</td><td contenteditable="true">'+(S.ct2.va||'')+'</td></tr>';
-    h+='<tr><td>Shorts</td><td contenteditable="true">'+(S.ct.sv||'')+' '+(S.ct.svp||'')+'</td><td contenteditable="true">'+(S.ct.sw||'')+' '+(S.ct.swp||'')+'</td><td contenteditable="true">'+(S.ct.sa||'')+'</td><td contenteditable="true">'+(S.ct2.sv||'')+' '+(S.ct2.svp||'')+'</td><td contenteditable="true">'+(S.ct2.sw||'')+' '+(S.ct2.swp||'')+'</td><td contenteditable="true">'+(S.ct2.sa||'')+'</td></tr>';
+    h+='<tr><td><b>전체</b></td><td contenteditable="true">'+(S.ct.tv||'-')+'</td><td contenteditable="true">'+(S.ct.tw||'-')+'</td><td contenteditable="true">'+(S.ct.ta||'-')+'</td><td contenteditable="true">'+(S.ct2.tv||'-')+'</td><td contenteditable="true">'+(S.ct2.tw||'-')+'</td><td contenteditable="true">'+(S.ct2.ta||'-')+'</td></tr>';
+    h+='<tr><td>동영상</td><td contenteditable="true">'+(S.ct.vv||'')+' '+(S.ct.vvp||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+' '+(S.ct.vwp||'')+'</td><td contenteditable="true">'+(S.ct.va||'-')+'</td><td contenteditable="true">'+(S.ct2.vv||'')+' '+(S.ct2.vvp||'')+'</td><td contenteditable="true">'+(S.ct2.vw||'')+' '+(S.ct2.vwp||'')+'</td><td contenteditable="true">'+(S.ct2.va||'-')+'</td></tr>';
+    h+='<tr><td>Shorts</td><td contenteditable="true">'+(S.ct.sv||'')+' '+(S.ct.svp||'')+'</td><td contenteditable="true">'+(S.ct.sw||'')+' '+(S.ct.swp||'')+'</td><td contenteditable="true">'+(S.ct.sa||'-')+'</td><td contenteditable="true">'+(S.ct2.sv||'')+' '+(S.ct2.svp||'')+'</td><td contenteditable="true">'+(S.ct2.sw||'')+' '+(S.ct2.swp||'')+'</td><td contenteditable="true">'+(S.ct2.sa||'-')+'</td></tr>';
   }else{
     h+='<table class="tbl" id="t_ct"><tr><th>유형</th><th>조회수</th><th>비율</th><th>시청시간</th><th>비율</th><th>평균 지속</th></tr>';
-    h+='<tr><td><b>전체</b></td><td contenteditable="true">'+(S.ct.tv||'')+'</td><td>-</td><td contenteditable="true">'+(S.ct.tw||'')+'</td><td>-</td><td contenteditable="true">'+(S.ct.ta||'')+'</td></tr>';
-    h+='<tr><td>동영상</td><td contenteditable="true">'+(S.ct.vv||'')+'</td><td contenteditable="true">'+(S.ct.vvp||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+'</td><td contenteditable="true">'+(S.ct.vwp||'')+'</td><td contenteditable="true">'+(S.ct.va||'')+'</td></tr>';
-    h+='<tr><td>Shorts</td><td contenteditable="true">'+(S.ct.sv||'')+'</td><td contenteditable="true">'+(S.ct.svp||'')+'</td><td contenteditable="true">'+(S.ct.sw||'')+'</td><td contenteditable="true">'+(S.ct.swp||'')+'</td><td contenteditable="true">'+(S.ct.sa||'')+'</td></tr>';
+    h+='<tr><td><b>전체</b></td><td contenteditable="true">'+(S.ct.tv||'-')+'</td><td>-</td><td contenteditable="true">'+(S.ct.tw||'-')+'</td><td>-</td><td contenteditable="true">'+(S.ct.ta||'-')+'</td></tr>';
+    h+='<tr><td>동영상</td><td contenteditable="true">'+(S.ct.vv||'-')+'</td><td contenteditable="true">'+(S.ct.vvp||'-')+'</td><td contenteditable="true">'+(S.ct.vw||'-')+'</td><td contenteditable="true">'+(S.ct.vwp||'-')+'</td><td contenteditable="true">'+(S.ct.va||'-')+'</td></tr>';
+    h+='<tr><td>Shorts</td><td contenteditable="true">'+(S.ct.sv||'-')+'</td><td contenteditable="true">'+(S.ct.svp||'-')+'</td><td contenteditable="true">'+(S.ct.sw||'-')+'</td><td contenteditable="true">'+(S.ct.swp||'-')+'</td><td contenteditable="true">'+(S.ct.sa||'-')+'</td></tr>';
   }
   h+='</table>';
 
-  // 팀원
+  /* 팀원 메모 */
   h+='<h3 class="mt4">👥 팀원 특이사항</h3><table class="tbl" id="t_team"><tr><th>팀원</th><th>내용</th></tr>';
   h+='<tr><td>양영은</td><td contenteditable="true">'+(S.nY||'없음')+'</td></tr>';
   h+='<tr><td>최건일</td><td contenteditable="true">'+(S.nC||'없음')+'</td></tr></table>';
   a.innerHTML=h;
+  console.log('preview built OK');
 }
 
-// DOCX
+/* ===== DOCX 문서 생성 ===== */
 document.getElementById('btnGen').addEventListener('click',function(){
-  console.log('docx generate clicked');
-  console.log('typeof docx:', typeof window.docx);
-  
+  console.log('btnGen clicked, window.docx=',typeof window.docx);
+
   if(typeof window.docx==='undefined'){
-    toast('docx 라이브러리 로딩 중... 잠시 후 다시 시도하세요','error');
-    // 동적 로드 시도
-    var sc=document.createElement('script');
-    sc.src='https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js';
-    sc.onload=function(){toast('라이브러리 로드 완료. 다시 버튼을 눌러주세요','success')};
-    document.head.appendChild(sc);
+    toast('docx 라이브러리를 불러오지 못했습니다. 페이지를 새로고침(Ctrl+Shift+R) 후 다시 시도하세요.','error');
     return;
   }
-  
+
   try{
     var D=window.docx;
-    var Document=D.Document,Packer=D.Packer,Paragraph=D.Paragraph,Table=D.Table,TableRow=D.TableRow,TableCell=D.TableCell,TextRun=D.TextRun,WidthType=D.WidthType,BorderStyle=D.BorderStyle,HeadingLevel=D.HeadingLevel;
+    var Document=D.Document,Packer=D.Packer,Paragraph=D.Paragraph,Table=D.Table,TableRow=D.TableRow,TableCell=D.TableCell,TextRun=D.TextRun,WidthType=D.WidthType,BorderStyle=D.BorderStyle,HeadingLevel=D.HeadingLevel,AlignmentType=D.AlignmentType;
+
     var mon=S.tws.getMonth()+1;
     var wk=weekOfMonth(S.tws);
+    var fileName='머니올라_'+mon+'월_'+wk+'주차_보고.docx';
+
     var bdr={top:{style:BorderStyle.SINGLE,size:1,color:'999999'},bottom:{style:BorderStyle.SINGLE,size:1,color:'999999'},left:{style:BorderStyle.SINGLE,size:1,color:'999999'},right:{style:BorderStyle.SINGLE,size:1,color:'999999'}};
-    function c(text,bold){return new TableCell({borders:bdr,children:[new Paragraph({children:[new TextRun({text:String(text||''),bold:!!bold,size:20,font:'맑은 고딕'})]})]})}
 
-    function readTable(id){var t=document.getElementById(id);var rows=[];if(!t)return rows;var trs=t.querySelectorAll('tr');for(var i=0;i<trs.length;i++){var cells=trs[i].querySelectorAll('td,th');var row=[];for(var j=0;j<cells.length;j++)row.push(cells[j].innerText||'');if(row.length)rows.push(row)}return rows}
-
-    var children=[];
-    children.push(new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'머니올라 '+mon+'월 '+wk+'주차 주간 보고',bold:true,size:32,font:'맑은 고딕'})]}));
-    children.push(new Paragraph({children:[new TextRun({text:'보고일: '+fmt(S.tws)+' | 지난주: '+fmt(S.lws)+'~'+fmt(S.lwe),size:20,color:'666666',font:'맑은 고딕'})]}));
-    children.push(new Paragraph({text:''}));
-
-    // 각 테이블을 DOM에서 읽어서 DOCX 테이블로 변환
-    var tables=[{id:'t1',title:'■ 업로드 및 예정 아이템'},{id:'t_ch',title:'■ 채널 현황 (구독자: '+(S.subs||'')+')'},{id:'t_ct',title:'■ 콘텐츠 유형별 실적'},{id:'t_team',title:'■ 팀원 특이사항'}];
-    
-    for(var ti=0;ti<tables.length;ti++){
-      var tdata=readTable(tables[ti].id);
-      if(!tdata.length)continue;
-      children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:tables[ti].title,bold:true,size:26,font:'맑은 고딕'})]}));
-      var dRows=[];
-      for(var ri=0;ri<tdata.length;ri++){
-        var cells=[];
-        for(var ci=0;ci<tdata[ri].length;ci++){cells.push(c(tdata[ri][ci],ri===0))}
-        dRows.push(new TableRow({children:cells}));
-      }
-      children.push(new Table({rows:dRows,width:{size:100,type:WidthType.PERCENTAGE}}));
-      children.push(new Paragraph({text:''}));
+    function mkCell(text,bold,shade){
+      var opts={borders:bdr,children:[new Paragraph({children:[new TextRun({text:String(text||''),bold:!!bold,size:20,font:'맑은 고딕'})]})]};
+      if(shade)opts.shading={fill:shade};
+      return new TableCell(opts);
     }
 
-    var doc=new Document({sections:[{children:children}]});
+    /* 미리보기 테이블에서 직접 데이터 읽기 */
+    function readTbl(id){
+      var t=document.getElementById(id);
+      var result=[];
+      if(!t)return result;
+      var trs=t.querySelectorAll('tr');
+      for(var i=0;i<trs.length;i++){
+        var cells=trs[i].querySelectorAll('td,th');
+        var row=[];
+        for(var j=0;j<cells.length;j++){row.push((cells[j].innerText||'').trim())}
+        if(row.length)result.push(row);
+      }
+      return result;
+    }
+
+    function buildDocTable(rows,headerShade){
+      if(!rows.length)return null;
+      var docRows=[];
+      for(var i=0;i<rows.length;i++){
+        var cells=[];
+        for(var j=0;j<rows[i].length;j++){
+          cells.push(mkCell(rows[i][j],i===0,(i===0?headerShade:null)));
+        }
+        docRows.push(new TableRow({children:cells}));
+      }
+      return new Table({rows:docRows,width:{size:100,type:WidthType.PERCENTAGE}});
+    }
+
+    var children=[];
+
+    /* 제목 */
+    children.push(new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'머니올라 '+mon+'월 '+wk+'주차 주간 보고',bold:true,size:32,font:'맑은 고딕'})]}));
+    children.push(new Paragraph({children:[new TextRun({text:'보고일: '+fmt(S.tws)+' | 지난주: '+fmt(S.lws)+' ~ '+fmt(S.lwe),size:20,color:'666666',font:'맑은 고딕'})]}));
+    children.push(new Paragraph({text:''}));
+
+    /* 1) 업로드 일정 테이블 */
+    children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'업로드 및 예정 아이템',bold:true,size:26,font:'맑은 고딕'})]}));
+    var t1=readTbl('t1');
+    var tbl1=buildDocTable(t1,'D9E2F3');
+    if(tbl1)children.push(tbl1);
+    children.push(new Paragraph({text:''}));
+
+    /* 2) 채널 현황 */
+    children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'채널 현황',bold:true,size:26,font:'맑은 고딕'})]}));
+    children.push(new Paragraph({children:[new TextRun({text:'현재 구독자: '+(S.subs||'-'),size:22,font:'맑은 고딕'})]}));
+    var tch=readTbl('t_ch');
+    var tbl2=buildDocTable(tch,'E8D5F5');
+    if(tbl2)children.push(tbl2);
+    children.push(new Paragraph({text:''}));
+
+    /* 3) 콘텐츠 유형 */
+    children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'콘텐츠 유형별',bold:true,size:26,font:'맑은 고딕'})]}));
+    var tct=readTbl('t_ct');
+    var tbl3=buildDocTable(tct,'FFF3CD');
+    if(tbl3)children.push(tbl3);
+    children.push(new Paragraph({text:''}));
+
+    /* 4) 팀원 메모 */
+    children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'팀원 특이사항',bold:true,size:26,font:'맑은 고딕'})]}));
+    var ttm=readTbl('t_team');
+    var tbl4=buildDocTable(ttm,'D5F5E3');
+    if(tbl4)children.push(tbl4);
+
+    var doc=new Document({
+      sections:[{children:children}]
+    });
+
     Packer.toBlob(doc).then(function(blob){
-      window.saveAs(blob,'머니올라_'+mon+'월_'+wk+'주차_보고.docx');
-      toast('문서 생성 완료!','success');
-    }).catch(function(e){console.error('Packer err',e);toast('생성 오류: '+e.message,'error')});
+      saveAs(blob,fileName);
+      toast('✅ '+fileName+' 생성 완료!','success');
+      console.log('docx saved:',fileName);
+    }).catch(function(e){
+      console.error('Packer error:',e);
+      toast('문서 생성 오류: '+e.message,'error');
+    });
+
   }catch(e){
-    console.error('docx err',e);
-    toast('생성 오류: '+e.message,'error');
+    console.error('docx generation error:',e);
+    toast('문서 생성 오류: '+e.message,'error');
   }
 });
 </script>
