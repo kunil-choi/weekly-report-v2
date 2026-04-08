@@ -170,7 +170,7 @@ label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:blo
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 <script>
 var GAS_URL='https://script.google.com/macros/s/AKfycbwmtjpbT8g9dwr2FFIUyAvaRhCH9quBB_pFAiSYfoQXlfWwW8Qs32VXjIzf9itZgmkXgA/exec';
-var S={baseDate:null,lws:null,lwe:null,tws:null,twe:null,lastSch:[],thisSch:[],yt:[],ch:{},ch2:{},ct:{},ct2:{},subs:'',nY:'',nC:'',prevDoc:null};
+var S={baseDate:null,lws:null,lwe:null,tws:null,twe:null,lastSch:[],thisSch:[],yt:[],ch:{},ch2:{},ct:{},ct2:{},subs:'',nY:'',nC:''};
 var DK=['일','월','화','수','목','금','토'];
 
 function toast(m,t){t=t||'info';var c=document.getElementById('toast-container'),d=document.createElement('div');d.className='toast '+t;d.textContent=m;c.appendChild(d);setTimeout(function(){d.remove()},4000)}
@@ -221,8 +221,6 @@ function parsePrevReport(html){
   var div=document.createElement('div');
   div.innerHTML=html;
   var tables=div.querySelectorAll('table');
-  /* 보고서 형식: 테이블1=업로드일정, 테이블2=채널현황, 테이블3=콘텐츠유형, 테이블4=특이사항 */
-  /* 채널현황 테이블에서 첫 번째 데이터행(지난주)을 "지지난주"로 사용 */
   for(var ti=0;ti<tables.length;ti++){
     var rows=tables[ti].querySelectorAll('tr');
     var headerText='';
@@ -231,7 +229,6 @@ function parsePrevReport(html){
       for(var j=0;j<ths.length;j++) headerText+=(ths[j].textContent||'')+' ';
     }
     headerText=headerText.trim();
-    /* 채널현황 테이블 감지: "조회수" "구독자" "수익" "CPM" 등이 헤더에 있으면 */
     if(headerText.indexOf('CPM')>-1 && headerText.indexOf('RPM')>-1){
       console.log('채널현황 테이블 발견, rows:',rows.length);
       if(rows.length>=2){
@@ -247,7 +244,6 @@ function parsePrevReport(html){
         }
       }
     }
-    /* 콘텐츠유형 테이블 감지: "동영상" "쇼츠" 포함 */
     if(headerText.indexOf('시청')>-1 && !headerText.match(/CPM/)){
       console.log('콘텐츠유형 테이블 발견, rows:',rows.length);
       for(var ri=1;ri<rows.length;ri++){
@@ -267,7 +263,7 @@ function parsePrevReport(html){
   }
 }
 
-/* ===== OCR: Tesseract.js로 이미지에서 한국어 텍스트 추출 ===== */
+/* ===== OCR 공통 함수 ===== */
 function runOCR(imageFile,statusElId,callback){
   var statusEl=document.getElementById(statusElId);
   if(statusEl)statusEl.textContent='🔍 OCR 인식 중... (최초 실행 시 한국어 데이터 다운로드로 30초~1분 소요)';
@@ -277,7 +273,7 @@ function runOCR(imageFile,statusElId,callback){
     }
   }).then(function(result){
     var text=result.data.text;
-    console.log('OCR result:',text);
+    console.log('OCR raw text:\n',text);
     if(statusEl){statusEl.textContent='✅ OCR 완료';statusEl.style.color='#34d399'}
     toast('OCR 인식 완료','success');
     if(callback)callback(text);
@@ -288,11 +284,10 @@ function runOCR(imageFile,statusElId,callback){
   });
 }
 
-/* 채널 현황 OCR 파싱 */
+/* ===== 채널 현황 OCR 파싱 (헤더-값 매칭 방식) ===== */
 function parseChannelOCR(text){
   console.log('parseChannelOCR input:', text);
 
-  /* 매핑: OCR에서 인식될 수 있는 헤더 텍스트 → 입력 필드 ID */
   var mapping = [
     {keywords: ['조회수','조회 수'], id: 'ch_views'},
     {keywords: ['구독자'], id: 'ch_subs'},
@@ -303,19 +298,9 @@ function parseChannelOCR(text){
     {keywords: ['평균 시청 지속','평균시청지속','평균 시청 지속 시간','평균시청시간','지속 시간','지속시간'], id: 'ch_avg'}
   ];
 
-  /*
-   * 전략: OCR 텍스트를 줄 단위로 나누고,
-   * 헤더 줄(한글 라벨)과 값 줄(숫자)을 쌍으로 매칭합니다.
-   * 
-   * 유튜브 스튜디오 스크린샷은 보통:
-   *   행1: "평균 시청 지속 시간 | 재생 기반 CPM | RPM | 조회수 ↓ | 구독자 | 예상 수익 | 노출 클릭률"
-   *   행2: "9:16 | ₩6,678 | ₩2,917 | 484,566 | 485 | ₩1,213,946 | 6.3%"
-   * 와 같은 형태입니다.
-   */
-
   var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
 
-  /* 헤더 줄 찾기: mapping의 keyword가 2개 이상 포함된 줄 */
+  /* 전략1: 헤더행 찾기 - mapping 키워드가 가장 많이 포함된 줄 */
   var headerLineIdx = -1;
   var bestScore = 0;
   for (var i = 0; i < lines.length; i++) {
@@ -327,28 +312,20 @@ function parseChannelOCR(text){
     }
     if (score > bestScore) { bestScore = score; headerLineIdx = i; }
   }
-
-  console.log('headerLineIdx:', headerLineIdx, 'score:', bestScore, 'line:', lines[headerLineIdx]);
+  console.log('headerLineIdx:', headerLineIdx, 'score:', bestScore);
 
   if (headerLineIdx >= 0 && bestScore >= 2) {
-    /* 헤더 줄을 탭/여러 공백/파이프로 분리 */
     var headerLine = lines[headerLineIdx];
     var headerParts = headerLine.split(/\t+|\s{2,}|\|/).map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
-
-    /* 값 줄: 헤더 바로 다음 줄 */
     var valueLine = (headerLineIdx + 1 < lines.length) ? lines[headerLineIdx + 1] : '';
     var valueParts = valueLine.split(/\t+|\s{2,}|\|/).map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
-
     console.log('headers:', headerParts);
     console.log('values:', valueParts);
 
-    /* 각 헤더 파트를 mapping과 매칭 */
     for (var hi = 0; hi < headerParts.length; hi++) {
       var header = headerParts[hi];
       var val = (hi < valueParts.length) ? valueParts[hi] : '';
-      /* ₩ 기호, 화살표 등 제거 */
-      val = val.replace(/[₩\\￦↓↑→←▼▲]/g, '').trim();
-
+      val = val.replace(/[₩￦↓↑→←▼▲]/g, '').trim();
       for (var mi = 0; mi < mapping.length; mi++) {
         var matched = false;
         for (var ki = 0; ki < mapping[mi].keywords.length; ki++) {
@@ -361,41 +338,35 @@ function parseChannelOCR(text){
         }
       }
     }
+    return;
   }
 
-  /*
-   * 대체 전략: 헤더 줄을 못 찾은 경우 또는 컬럼 분리가 안 된 경우
-   * 각 줄에서 "라벨: 값" 또는 "라벨 값" 패턴을 찾습니다.
-   */
-  if (bestScore < 2) {
-    console.log('fallback: line-by-line keyword matching');
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      for (var mi = 0; mi < mapping.length; mi++) {
-        var matched = false;
-        for (var ki = 0; ki < mapping[mi].keywords.length; ki++) {
-          if (line.indexOf(mapping[mi].keywords[ki]) > -1) { matched = true; break; }
+  /* 전략2: 줄 단위로 키워드-값 매칭 */
+  console.log('fallback: line-by-line keyword matching');
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    for (var mi = 0; mi < mapping.length; mi++) {
+      if (V(mapping[mi].id)) continue;
+      var matched = false;
+      for (var ki = 0; ki < mapping[mi].keywords.length; ki++) {
+        if (line.indexOf(mapping[mi].keywords[ki]) > -1) { matched = true; break; }
+      }
+      if (!matched) continue;
+
+      var timeMatch = line.match(/\d+분\s*\d+초|\d+:\d+/);
+      var numMatch = line.match(/[\d,\.]+[만원%]?/);
+
+      if (mapping[mi].id === 'ch_avg') {
+        if (timeMatch) { setV(mapping[mi].id, timeMatch[0]); }
+        else if (i + 1 < lines.length) {
+          var tm2 = lines[i + 1].match(/\d+분\s*\d+초|\d+:\d+/);
+          if (tm2) setV(mapping[mi].id, tm2[0]);
         }
-        if (matched && !V(mapping[mi].id)) {
-          /* 같은 줄에서 숫자 추출 */
-          var numMatch = line.match(/[\d,\.]+[만원%]?/);
-          var timeMatch = line.match(/\d+분\s*\d+초|\d+:\d+/);
-          if (mapping[mi].id === 'ch_avg' && timeMatch) {
-            setV(mapping[mi].id, timeMatch[0]);
-          } else if (numMatch) {
-            setV(mapping[mi].id, numMatch[0].replace(/[₩\\￦]/g, ''));
-          }
-          /* 숫자가 같은 줄에 없으면 다음 줄 확인 */
-          if (!V(mapping[mi].id) && i + 1 < lines.length) {
-            var nextLine = lines[i + 1];
-            var nm2 = nextLine.match(/[\d,\.]+[만원%]?/);
-            var tm2 = nextLine.match(/\d+분\s*\d+초|\d+:\d+/);
-            if (mapping[mi].id === 'ch_avg' && tm2) {
-              setV(mapping[mi].id, tm2[0]);
-            } else if (nm2) {
-              setV(mapping[mi].id, nm2[0].replace(/[₩\\￦]/g, ''));
-            }
-          }
+      } else {
+        if (numMatch) { setV(mapping[mi].id, numMatch[0].replace(/[₩￦]/g, '')); }
+        else if (i + 1 < lines.length) {
+          var nm2 = lines[i + 1].match(/[\d,\.]+[만원%]?/);
+          if (nm2) setV(mapping[mi].id, nm2[0].replace(/[₩￦]/g, ''));
         }
       }
     }
@@ -407,37 +378,40 @@ function parseChannelOCR(text){
   });
 }
 
-/* 콘텐츠 유형 OCR 파싱 */
+/* ===== 콘텐츠 유형 OCR 파싱 ===== */
 function parseContentOCR(text){
-  console.log('parseContentOCR input:',text);
-  var lines=text.split('\n').map(function(l){return l.trim()}).filter(function(l){return l.length>0});
-  for(var i=0;i<lines.length;i++){
-    var line=lines[i];
-    if(line.match(/동영상/i)){
-      var nums=line.match(/[\d,\.]+만?\s*\([\d,\.]+%\)/g);
-      if(nums&&nums.length>=2){setV('ct_vv',nums[0]);setV('ct_vw',nums[1])}
-      else{var n2=line.match(/[\d,\.]+만?[\s\(]?[\d,\.]*%?\)?/g);if(n2&&n2.length>=2){setV('ct_vv',n2[0]);setV('ct_vw',n2[1])}}
+  console.log('parseContentOCR input:', text);
+  var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (line.match(/동영상/i)) {
+      var nums = line.match(/[\d,\.]+만?\s*\([\d,\.]+%\)/g);
+      if (nums && nums.length >= 2) { setV('ct_vv', nums[0]); setV('ct_vw', nums[1]); }
+      else {
+        var n2 = line.match(/[\d,\.]+만?[\s\(]?[\d,\.]*%?\)?/g);
+        if (n2 && n2.length >= 2) { setV('ct_vv', n2[0]); setV('ct_vw', n2[1]); }
+      }
     }
-    if(line.match(/쇼츠|Shorts|shorts/i)){
-      var nums=line.match(/[\d,\.]+만?\s*\([\d,\.]+%\)/g);
-      if(nums&&nums.length>=2){setV('ct_sv',nums[0]);setV('ct_sw',nums[1])}
-      else{var n2=line.match(/[\d,\.]+만?[\s\(]?[\d,\.]*%?\)?/g);if(n2&&n2.length>=2){setV('ct_sv',n2[0]);setV('ct_sw',n2[1])}}
+    if (line.match(/쇼츠|Shorts|shorts/i)) {
+      var nums = line.match(/[\d,\.]+만?\s*\([\d,\.]+%\)/g);
+      if (nums && nums.length >= 2) { setV('ct_sv', nums[0]); setV('ct_sw', nums[1]); }
+      else {
+        var n2 = line.match(/[\d,\.]+만?[\s\(]?[\d,\.]*%?\)?/g);
+        if (n2 && n2.length >= 2) { setV('ct_sv', n2[0]); setV('ct_sw', n2[1]); }
+      }
     }
   }
 }
 
 /* Step 3 이미지 */
 document.getElementById('chImg').addEventListener('change',function(e){
-  var f=e.target.files[0];
-  if(!f)return;
+  var f=e.target.files[0];if(!f)return;
   var img=document.getElementById('chImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden');
   runOCR(f,'chOcrStatus',parseChannelOCR);
 });
-
 /* Step 4 이미지 */
 document.getElementById('ctImg').addEventListener('change',function(e){
-  var f=e.target.files[0];
-  if(!f)return;
+  var f=e.target.files[0];if(!f)return;
   var img=document.getElementById('ctImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden');
   runOCR(f,'ctOcrStatus',parseContentOCR);
 });
@@ -452,7 +426,7 @@ document.getElementById('btnStart').addEventListener('click',function(){
   setTimeout(function(){go(2);runStep2()},500);
 });
 
-/* ===== Step 2 ===== */
+/* ===== Step 2: GAS 호출 ===== */
 function runStep2(){
   var st=document.getElementById('s2status');
   document.getElementById('s2log').innerHTML='';
@@ -480,7 +454,7 @@ function runStep2(){
     document.getElementById('s2load').classList.add('hidden');
     document.getElementById('s2result').classList.remove('hidden');
     renderS2();
-  }).catch(function(e){addLog('오류: '+e.message,'err');st.textContent='오류 발생';document.getElementById('s2load').classList.add('hidden');document.getElementById('s2result').classList.remove('hidden')});
+  }).catch(function(e){addLog('오류: '+e.message,'err');document.getElementById('s2load').classList.add('hidden');document.getElementById('s2result').classList.remove('hidden')});
 }
 function renderS2(){
   var yd=document.getElementById('ytR');
@@ -498,30 +472,26 @@ function renderS2(){
 function saveS3(){
   S.ch={views:V('ch_views'),subs:V('ch_subs'),rev:V('ch_rev'),cpm:V('ch_cpm'),rpm:V('ch_rpm'),ctr:V('ch_ctr'),avg:V('ch_avg')};
   S.ch2={views:V('ch2_views'),subs:V('ch2_subs'),rev:V('ch2_rev'),cpm:V('ch2_cpm'),rpm:V('ch2_rpm'),ctr:V('ch2_ctr'),avg:V('ch2_avg')};
-  console.log('saveS3',JSON.stringify(S.ch),JSON.stringify(S.ch2));
   toast('채널 현황 저장됨','success');
 }
 function saveS4(){
   S.ct={vv:V('ct_vv'),vw:V('ct_vw'),sv:V('ct_sv'),sw:V('ct_sw')};
   S.ct2={vv:V('ct2_vv'),vw:V('ct2_vw'),sv:V('ct2_sv'),sw:V('ct2_sw')};
-  console.log('saveS4',JSON.stringify(S.ct),JSON.stringify(S.ct2));
   toast('콘텐츠 유형 저장됨','success');
 }
 document.getElementById('todayL').textContent=(function(){var d=new Date();return(d.getMonth()+1)+'/'+d.getDate()+' '+DK[d.getDay()]+'요일'})();
 function saveS5(){S.subs=V('curSubs');S.nY=V('noteY');S.nC=V('noteC');toast('저장됨','success')}
 
-/* ===== Step 6: 미리보기 (샘플 보고서 형식 그대로) ===== */
+/* ===== Step 6: 미리보기 (샘플 보고서 형식) ===== */
 function buildPreview(){
   var a=document.getElementById('prevArea');var h='';
   var lwRange=fmtShort(S.lws)+'~'+fmtShort(S.lwe);
-  var twRange=fmtShort(S.tws)+'~'+fmtShort(S.twe);
   var mon=S.tws.getMonth()+1;
   var wk=weekOfMonth(S.tws);
 
-  /* 제목 */
   h+='<h3>■ 머니올라 '+mon+'월 '+(wk-1)+'주차 실적 및 '+mon+'월 '+wk+'주차 계획</h3>';
 
-  /* 업로드 일정 테이블 */
+  /* 업로드 일정 */
   h+='<table class="tbl" id="t1"><tr><th>날짜</th><th>업로드 및 예정 아이템</th><th>스튜디오 녹화 일정</th><th>조회수</th></tr>';
   var lwD=daysIn(S.lws,S.lwe);
   for(var di=0;di<lwD.length;di++){
@@ -534,7 +504,6 @@ function buildPreview(){
     if(sch){if(!upload&&sch.uploadItem)upload=sch.uploadItem;if(sch.studioRecord)record=sch.studioRecord}
     h+='<tr><td contenteditable="true">'+dateLabel+'</td><td contenteditable="true">'+upload+'</td><td contenteditable="true">'+record+'</td><td contenteditable="true">'+views+'</td></tr>';
   }
-  /* 이번주 */
   var twD=daysIn(S.tws,S.twe);
   for(var di=0;di<twD.length;di++){
     var d=twD[di];
@@ -579,12 +548,10 @@ function buildPreview(){
 
 /* ===== DOCX 문서 생성 ===== */
 document.getElementById('btnGen').addEventListener('click',function(){
-  console.log('btnGen clicked, window.docx=',typeof window.docx);
-  if(typeof window.docx==='undefined'){toast('docx 라이브러리 로딩 실패. 페이지 새로고침(Ctrl+Shift+R) 후 다시 시도하세요.','error');return}
-
+  if(typeof window.docx==='undefined'){toast('docx 라이브러리 로딩 실패. Ctrl+Shift+R 새로고침 후 다시 시도하세요.','error');return}
   try{
     var D=window.docx;
-    var Document=D.Document,Packer=D.Packer,Paragraph=D.Paragraph,Table=D.Table,TableRow=D.TableRow,TableCell=D.TableCell,TextRun=D.TextRun,WidthType=D.WidthType,BorderStyle=D.BorderStyle,HeadingLevel=D.HeadingLevel,AlignmentType=D.AlignmentType;
+    var Document=D.Document,Packer=D.Packer,Paragraph=D.Paragraph,Table=D.Table,TableRow=D.TableRow,TableCell=D.TableCell,TextRun=D.TextRun,WidthType=D.WidthType,BorderStyle=D.BorderStyle;
     var mon=S.tws.getMonth()+1;
     var wk=weekOfMonth(S.tws);
     var fileName='머니올라_'+mon+'월_'+wk+'주차_보고.docx';
@@ -622,39 +589,28 @@ document.getElementById('btnGen').addEventListener('click',function(){
     }
 
     var children=[];
-
-    /* 제목 */
     children.push(new Paragraph({children:[new TextRun({text:'■ 머니올라 '+mon+'월 '+(wk-1)+'주차 실적 및 '+mon+'월 '+wk+'주차 계획',bold:true,size:26,font:'맑은 고딕'})]}));
     children.push(new Paragraph({text:''}));
 
-    /* 업로드 일정 */
-    var t1=readTbl('t1');
-    var tbl1=buildDocTable(t1);
+    var t1=readTbl('t1');var tbl1=buildDocTable(t1);
     if(tbl1)children.push(tbl1);
     children.push(new Paragraph({text:''}));
 
-    /* 채널 현황 */
     children.push(new Paragraph({children:[new TextRun({text:'■ 머니올라 채널 현황',bold:true,size:26,font:'맑은 고딕'})]}));
     children.push(new Paragraph({children:[new TextRun({text:'구독자 : '+(S.subs||'-')+'명 ('+fmtShort(S.tws)+')',size:22,font:'맑은 고딕'})]}));
     children.push(new Paragraph({text:''}));
-    var tch=readTbl('t_ch');
-    var tbl2=buildDocTable(tch);
+    var tch=readTbl('t_ch');var tbl2=buildDocTable(tch);
     if(tbl2)children.push(tbl2);
     children.push(new Paragraph({text:''}));
 
-    /* 콘텐츠 유형 */
-    var tct=readTbl('t_ct');
-    var tbl3=buildDocTable(tct);
+    var tct=readTbl('t_ct');var tbl3=buildDocTable(tct);
     if(tbl3)children.push(tbl3);
     children.push(new Paragraph({text:''}));
 
-    /* 팀원 메모 */
-    var ttm=readTbl('t_team');
-    var tbl4=buildDocTable(ttm);
+    var ttm=readTbl('t_team');var tbl4=buildDocTable(ttm);
     if(tbl4)children.push(tbl4);
 
     var doc=new Document({sections:[{children:children}]});
-
     Packer.toBlob(doc).then(function(blob){
       saveAs(blob,fileName);
       toast('✅ '+fileName+' 생성 완료!','success');
