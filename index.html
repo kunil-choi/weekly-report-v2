@@ -167,43 +167,22 @@ label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:blo
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.umd.min.js"></script>
 <script>
-/* ★수정3: docx를 즉시 실행 함수로 안전하게 로딩 (페이지 로드 시 에러 토스트 제거) */
 var _docxLib = null;
 var _docxReady = false;
-(function(){
-  var urls = [
-    'https://cdn.jsdelivr.net/npm/docx@7.7.0/build/index.umd.js',
-    'https://unpkg.com/docx@7.7.0/build/index.umd.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/docx/7.7.0/index.umd.js'
-  ];
-  var idx = 0;
-  function tryLoad(){
-    if(idx >= urls.length){
-      console.error('docx: 모든 CDN 실패');
-      return;
-    }
-    var s = document.createElement('script');
-    s.src = urls[idx];
-    s.onload = function(){
-      _docxLib = window.docx || null;
-      if(_docxLib && _docxLib.Document){
-        _docxReady = true;
-        console.log('docx loaded from:', urls[idx]);
-      } else {
-        idx++;
-        tryLoad();
-      }
-    };
-    s.onerror = function(){
-      console.warn('docx load failed:', urls[idx]);
-      idx++;
-      tryLoad();
-    };
-    document.head.appendChild(s);
-  }
-  tryLoad();
-})();
+function checkDocx(){
+  _docxLib = window.docx || null;
+  if(_docxLib && _docxLib.Document){ _docxReady = true; console.log('docx ready'); return; }
+  var s = document.createElement('script');
+  s.src = 'https://unpkg.com/docx@7.8.2/build/index.umd.min.js';
+  s.onload = function(){
+    _docxLib = window.docx || null;
+    if(_docxLib && _docxLib.Document){ _docxReady = true; console.log('docx ready (unpkg)'); }
+  };
+  document.head.appendChild(s);
+}
+checkDocx();
 
 var GAS_URL='https://script.google.com/macros/s/AKfycbwmtjpbT8g9dwr2FFIUyAvaRhCH9quBB_pFAiSYfoQXlfWwW8Qs32VXjIzf9itZgmkXgA/exec';
 var S={baseDate:null,lws:null,lwe:null,tws:null,twe:null,lastSch:[],thisSch:[],yt:[],ch:{},ch2:{},ct:{},ct2:{},subs:'',nY:'',nC:''};
@@ -277,7 +256,6 @@ function parsePrevReport(html){
     }
     headerText=headerText.trim();
     if(headerText.indexOf('CPM')>-1 && headerText.indexOf('RPM')>-1){
-      console.log('채널현황 테이블 발견, rows:',rows.length);
       if(rows.length>=2){
         var cells=rows[1].querySelectorAll('td');
         if(cells.length>=8){
@@ -292,7 +270,6 @@ function parsePrevReport(html){
       }
     }
     if(headerText.indexOf('시청')>-1 && !headerText.match(/CPM/)){
-      console.log('콘텐츠유형 테이블 발견, rows:',rows.length);
       for(var ri=1;ri<rows.length;ri++){
         var cells=rows[ri].querySelectorAll('td');
         if(cells.length<3)continue;
@@ -331,7 +308,7 @@ function runOCR(imageFile,statusElId,callback){
   });
 }
 
-/* ===== 채널 현황 OCR 파싱 (이전과 동일 — 수정 안 함) ===== */
+/* ===== 채널 현황 OCR 파싱 ===== */
 function parseChannelOCR(text){
   console.log('=== parseChannelOCR 시작 ===');
   var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
@@ -421,21 +398,11 @@ function parseChannelOCR(text){
   }
 }
 
-/* =======================================================================
-   ★수정1+2: 콘텐츠 유형 OCR 파싱 — 완전 재작성
-   =======================================================================
-   핵심 변경:
-   1) 동영상 행 인식: "동영상" 뿐 아니라 OCR 오류 대비 넓은 매칭
-   2) 숫자+퍼센트 쌍을 테이블 구조로 파싱 (합계행 제외)
-   3) 퍼센트 합계 100% 검증 → 소수점 누락 자동 보정
-   4) 만 단위 변환 + (%) 형식 출력
-   ======================================================================= */
+/* ===== 콘텐츠 유형: 만 단위 변환 ===== */
 function formatManPct(numStr, pctStr){
   var n = parseFloat((numStr||'').replace(/,/g,''));
-  var p = (pctStr||'').replace(/[()%]/g,'').trim();
-  var pNum = parseFloat(p);
-  if(isNaN(n)) return '';
-  if(isNaN(pNum)) return '';
+  var p = parseFloat((pctStr||'').replace(/[()%]/g,'').trim());
+  if(isNaN(n) || isNaN(p)) return '';
   var manStr;
   if(n >= 10000){
     var man = n / 10000;
@@ -445,86 +412,77 @@ function formatManPct(numStr, pctStr){
   } else {
     manStr = n % 1 === 0 ? String(n) : n.toFixed(1);
   }
-  return manStr + '(' + pNum.toFixed(1).replace(/\.0$/,'') + '%)';
+  return manStr + '(' + p.toFixed(1).replace(/\.0$/,'') + '%)';
 }
 
+/* ===== 콘텐츠 유형 OCR 파싱 ===== */
 function parseContentOCR(text){
   console.log('=== parseContentOCR 시작 ===');
   var lines = text.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>0;});
   for(var i=0;i<lines.length;i++) console.log('CL'+i+':',lines[i]);
 
-  /* --- 1단계: 합계행에서 전체 숫자 파악 (나중에 검증용) --- */
-  var totalViews = 0, totalWatch = 0;
-  for(var i=0;i<lines.length;i++){
-    if(/합계/.test(lines[i])){
-      var nums = lines[i].match(/[\d,]+\.?\d*/g);
-      if(nums){
-        for(var ni=0;ni<nums.length;ni++){
-          var n = parseFloat(nums[ni].replace(/,/g,''));
-          if(n > totalViews && n > 1000) { totalWatch = totalViews; totalViews = n; }
-          else if(n > totalWatch && n > 100) { totalWatch = n; }
+  function getAllNumbers(line){
+    var result = [];
+    var timeless = line.replace(/\d+:\d+/g, function(m){ return ' '.repeat(m.length); });
+    var re = /(\d[\d,]*\.?\d*)/g;
+    var m;
+    while((m = re.exec(timeless)) !== null){
+      result.push({val: m[1], pos: m.index});
+    }
+    return result;
+  }
+
+  function parseDataRow(line){
+    var allNums = getAllNumbers(line);
+    console.log('  allNums:', allNums.map(function(x){return x.val;}));
+    var pctPositions = [];
+    var pctRe = /%/g;
+    var pm;
+    while((pm = pctRe.exec(line)) !== null){
+      pctPositions.push(pm.index);
+    }
+    console.log('  % positions:', pctPositions);
+    var dataNums = [];
+    var pctNums = [];
+    for(var ni=0; ni<allNums.length; ni++){
+      var numEnd = allNums[ni].pos + allNums[ni].val.length;
+      var isPct = false;
+      for(var pi=0; pi<pctPositions.length; pi++){
+        var gap = line.substring(numEnd, pctPositions[pi]);
+        if(gap.length <= 3 && /^\s*$/.test(gap)){
+          isPct = true;
+          break;
         }
       }
-      console.log('합계: views='+totalViews+', watch='+totalWatch);
-      break;
+      if(isPct){
+        pctNums.push(allNums[ni].val);
+      } else {
+        dataNums.push(allNums[ni].val);
+      }
     }
-  }
-
-  /* --- 2단계: 동영상/Shorts 행 데이터 추출 --- */
-  // 각 행에서 [숫자, 퍼센트, 숫자, 퍼센트, ...] 토큰 추출
-  function extractTokens(line){
-    var tokens = [];
-    // 숫자(콤마/소수점 포함) 또는 퍼센트를 순서대로 추출
-    var regex = /([\d,]+\.?\d*)\s*(%)?/g;
-    var m;
-    while((m = regex.exec(line)) !== null){
-      var val = m[1];
-      var isPct = !!m[2];
-      // 시간 형식 건너뛰기 (앞뒤에 : 확인)
-      var before = m.index > 0 ? line[m.index-1] : '';
-      var after = m.index + m[0].length < line.length ? line[m.index + m[0].length] : '';
-      if(before === ':' || after === ':' || /^\d+:\d+$/.test(val)) continue;
-      tokens.push({val: val, isPct: isPct, raw: m[0]});
-    }
-    return tokens;
-  }
-
-  function parseRow(line){
-    var tokens = extractTokens(line);
-    console.log('  tokens:', tokens.map(function(t){return t.val+(t.isPct?'%':'');}));
-    // 기대 패턴: 숫자 퍼센트 숫자 퍼센트 [시간]
-    // 즉: viewNum viewPct watchNum watchPct
-    var nums = [], pcts = [];
-    for(var ti=0;ti<tokens.length;ti++){
-      if(tokens[ti].isPct) pcts.push(tokens[ti].val);
-      else nums.push(tokens[ti].val);
-    }
-    console.log('  nums:', nums, 'pcts:', pcts);
-    // 조회수 = nums[0] + pcts[0], 시청시간 = nums[1] + pcts[1]
+    console.log('  dataNums:', dataNums, 'pctNums:', pctNums);
     return {
-      viewNum: nums[0]||'', viewPct: pcts[0]||'',
-      watchNum: nums[1]||'', watchPct: pcts[1]||''
+      viewNum: dataNums[0]||'',
+      viewPct: pctNums[0]||'',
+      watchNum: dataNums[1]||'',
+      watchPct: pctNums[1]||''
     };
   }
 
   var videoRow = null, shortsRow = null;
   for(var i=0;i<lines.length;i++){
     var line = lines[i];
-    if(/합계/.test(line)) continue; // 합계행 건너뛰기
-
+    if(/합계/.test(line)) continue;
     var isVideo = /동영상/.test(line);
     var isShorts = /[Ss]horts|쇼츠/.test(line);
     if(!isVideo && !isShorts) continue;
-
-    console.log((isVideo?'동영상':'Shorts')+' 행 발견:', line);
-    var data = parseRow(line);
-
-    // 같은 줄에 데이터가 부족하면 다음 줄도 합쳐서 시도
-    if((!data.viewNum || !data.viewPct) && i+1 < lines.length && !/합계|동영상|[Ss]horts|쇼츠/.test(lines[i+1])){
+    console.log((isVideo?'동영상':'Shorts')+' 행:', line);
+    var data = parseDataRow(line);
+    if((!data.viewNum || !data.viewPct || !data.watchNum || !data.watchPct)
+       && i+1<lines.length && !/합계|동영상|[Ss]horts|쇼츠/.test(lines[i+1])){
       console.log('  다음 줄 합침:', lines[i+1]);
-      data = parseRow(line + ' ' + lines[i+1]);
+      data = parseDataRow(line + '  ' + lines[i+1]);
     }
-
     if(isVideo) videoRow = data;
     if(isShorts) shortsRow = data;
   }
@@ -532,54 +490,35 @@ function parseContentOCR(text){
   console.log('동영상 raw:', videoRow);
   console.log('Shorts raw:', shortsRow);
 
-  /* --- 3단계: 퍼센트 합계 100% 검증 및 소수점 보정 --- */
-  function fixPctPair(pct1, pct2){
-    var p1 = parseFloat(pct1);
-    var p2 = parseFloat(pct2);
-    if(isNaN(p1) || isNaN(p2)) return [pct1, pct2];
+  /* 퍼센트 합계 100% 검증 및 소수점 보정 */
+  function fixPct(p1str, p2str){
+    var p1 = parseFloat(p1str);
+    var p2 = parseFloat(p2str);
+    if(isNaN(p1) && isNaN(p2)) return [p1str, p2str];
+    if(isNaN(p1) && !isNaN(p2)) return [String(Math.round((100-p2)*10)/10), String(p2)];
+    if(!isNaN(p1) && isNaN(p2)) return [String(p1), String(Math.round((100-p1)*10)/10)];
     var sum = p1 + p2;
-    console.log('  퍼센트 합계 검증: '+p1+' + '+p2+' = '+sum);
-
-    // 합이 100 근처면 OK
     if(sum >= 99 && sum <= 101) return [String(p1), String(p2)];
-
-    // 합이 1000 근처 → 둘 다 10으로 나눠야
-    if(sum >= 990 && sum <= 1010){
-      return [String(p1/10), String(p2/10)];
-    }
-
-    // 한쪽이 100 이상이면 그쪽을 10으로 나눔
-    if(p1 > 100 && p2 < 100){
-      var fixed1 = p1 / 10;
-      if(Math.abs(fixed1 + p2 - 100) < 2) return [String(fixed1), String(p2)];
-    }
-    if(p2 > 100 && p1 < 100){
-      var fixed2 = p2 / 10;
-      if(Math.abs(p1 + fixed2 - 100) < 2) return [String(p1), String(fixed2)];
-    }
-
-    // 한쪽이 없으면 100에서 빼기
-    if(p1 && !p2) return [String(p1), String(100 - p1)];
-    if(p2 && !p1) return [String(100 - p2), String(p2)];
-
-    return [String(p1), String(p2)];
+    if(sum >= 900 && sum <= 1100) return [String(Math.round(p1/10*10)/10), String(Math.round(p2/10*10)/10)];
+    if(p1 > 100){ var f1=p1/10; if(Math.abs(f1+p2-100)<3) return [String(Math.round(f1*10)/10), String(p2)]; }
+    if(p2 > 100){ var f2=p2/10; if(Math.abs(p1+f2-100)<3) return [String(p1), String(Math.round(f2*10)/10)]; }
+    if(p1 > 100) p1 = p1/10;
+    if(p2 > 100) p2 = p2/10;
+    return [String(Math.round(p1*10)/10), String(Math.round(p2*10)/10)];
   }
 
-  // 조회수 퍼센트 보정
   if(videoRow && shortsRow){
-    var fixedViewPct = fixPctPair(videoRow.viewPct, shortsRow.viewPct);
-    videoRow.viewPct = fixedViewPct[0];
-    shortsRow.viewPct = fixedViewPct[1];
-
-    var fixedWatchPct = fixPctPair(videoRow.watchPct, shortsRow.watchPct);
-    videoRow.watchPct = fixedWatchPct[0];
-    shortsRow.watchPct = fixedWatchPct[1];
+    var fv = fixPct(videoRow.viewPct, shortsRow.viewPct);
+    videoRow.viewPct = fv[0]; shortsRow.viewPct = fv[1];
+    var fw = fixPct(videoRow.watchPct, shortsRow.watchPct);
+    videoRow.watchPct = fw[0]; shortsRow.watchPct = fw[1];
+  } else if(shortsRow && !videoRow){
+    var sp=parseFloat(shortsRow.viewPct);
+    if(!isNaN(sp)&&sp>100) shortsRow.viewPct=String(Math.round(sp/10*10)/10);
+    var swp=parseFloat(shortsRow.watchPct);
+    if(!isNaN(swp)&&swp>100) shortsRow.watchPct=String(Math.round(swp/10*10)/10);
   }
 
-  console.log('보정 후 동영상:', videoRow);
-  console.log('보정 후 Shorts:', shortsRow);
-
-  /* --- 4단계: 열 순서 확인 --- */
   var colOrder = 'views_first';
   for(var i=0;i<lines.length;i++){
     if(/조회\s*수/.test(lines[i]) && /시청/.test(lines[i])){
@@ -590,20 +529,18 @@ function parseContentOCR(text){
     }
   }
 
-  /* --- 5단계: 필드에 입력 --- */
   if(videoRow){
-    var vv = formatManPct(videoRow.viewNum, videoRow.viewPct);
-    var vw = formatManPct(videoRow.watchNum, videoRow.watchPct);
+    var vv=formatManPct(videoRow.viewNum,videoRow.viewPct);
+    var vw=formatManPct(videoRow.watchNum,videoRow.watchPct);
     if(colOrder==='views_first'){setV('ct_vv',vv);setV('ct_vw',vw);}
     else{setV('ct_vw',vv);setV('ct_vv',vw);}
   }
   if(shortsRow){
-    var sv = formatManPct(shortsRow.viewNum, shortsRow.viewPct);
-    var sw = formatManPct(shortsRow.watchNum, shortsRow.watchPct);
+    var sv=formatManPct(shortsRow.viewNum,shortsRow.viewPct);
+    var sw=formatManPct(shortsRow.watchNum,shortsRow.watchPct);
     if(colOrder==='views_first'){setV('ct_sv',sv);setV('ct_sw',sw);}
     else{setV('ct_sw',sv);setV('ct_sv',sw);}
   }
-
   console.log('=== parseContentOCR 최종 ===');
   console.log({vv:V('ct_vv'),vw:V('ct_vw'),sv:V('ct_sv'),sw:V('ct_sw')});
 }
@@ -693,9 +630,7 @@ function buildPreview(){
   var lwRange=fmtShort(S.lws)+'~'+fmtShort(S.lwe);
   var mon=S.tws.getMonth()+1;
   var wk=weekOfMonth(S.tws);
-
   h+='<h3>■ 머니올라 '+mon+'월 '+(wk-1)+'주차 실적 및 '+mon+'월 '+wk+'주차 계획</h3>';
-
   h+='<table class="tbl" id="t1"><tr><th>날짜</th><th>업로드 및 예정 아이템</th><th>스튜디오 녹화 일정</th><th>조회수</th></tr>';
   var lwD=daysIn(S.lws,S.lwe);
   for(var di=0;di<lwD.length;di++){
@@ -716,13 +651,11 @@ function buildPreview(){
     h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+upload+'</td><td contenteditable="true">'+record+'</td><td>-</td></tr>';
   }
   h+='</table>';
-
   h+='<h3>■ 채널 현황 ('+lwRange+')</h3>';
   h+='<table class="tbl" id="t2"><tr><th></th><th>조회수</th><th>구독자</th><th>예상 수익</th><th>재생 기반 CPM</th><th>RPM</th><th>노출 클릭률</th><th>평균 시청 지속 시간</th></tr>';
   h+='<tr><td><b>지난주</b></td><td contenteditable="true">'+(S.ch.views||'')+'</td><td contenteditable="true">'+(S.ch.subs||'')+'</td><td contenteditable="true">'+(S.ch.rev||'')+'</td><td contenteditable="true">'+(S.ch.cpm||'')+'</td><td contenteditable="true">'+(S.ch.rpm||'')+'</td><td contenteditable="true">'+(S.ch.ctr||'')+'</td><td contenteditable="true">'+(S.ch.avg||'')+'</td></tr>';
   h+='<tr><td><b>지지난주</b></td><td contenteditable="true">'+(S.ch2.views||'')+'</td><td contenteditable="true">'+(S.ch2.subs||'')+'</td><td contenteditable="true">'+(S.ch2.rev||'')+'</td><td contenteditable="true">'+(S.ch2.cpm||'')+'</td><td contenteditable="true">'+(S.ch2.rpm||'')+'</td><td contenteditable="true">'+(S.ch2.ctr||'')+'</td><td contenteditable="true">'+(S.ch2.avg||'')+'</td></tr>';
   h+='</table>';
-
   h+='<h3>■ 콘텐츠 유형별 ('+lwRange+')</h3>';
   h+='<table class="tbl" id="t3"><tr><th></th><th>조회수</th><th>시청 시간</th></tr>';
   h+='<tr><td><b>지난주 동영상</b></td><td contenteditable="true">'+(S.ct.vv||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+'</td></tr>';
@@ -730,20 +663,17 @@ function buildPreview(){
   h+='<tr><td><b>지지난주 동영상</b></td><td contenteditable="true">'+(S.ct2.vv||'')+'</td><td contenteditable="true">'+(S.ct2.vw||'')+'</td></tr>';
   h+='<tr><td><b>지지난주 Shorts</b></td><td contenteditable="true">'+(S.ct2.sv||'')+'</td><td contenteditable="true">'+(S.ct2.sw||'')+'</td></tr>';
   h+='</table>';
-
   h+='<h3>■ 구독자 현황</h3>';
   h+='<p id="pSubs">현재 구독자 수: <b>'+(S.subs||'')+'</b></p>';
-
   h+='<h3>■ 팀원별 특이사항</h3>';
   h+='<table class="tbl" id="t4"><tr><th>팀원</th><th>내용</th></tr>';
   h+='<tr><td>양영은</td><td contenteditable="true">'+(S.nY||'-')+'</td></tr>';
   h+='<tr><td>최건일</td><td contenteditable="true">'+(S.nC||'-')+'</td></tr>';
   h+='</table>';
-
   a.innerHTML=h;
 }
 
-/* ★수정3: DOCX 생성 — _docxLib 안전 참조 + 재시도 로직 */
+/* ===== DOCX 생성 ===== */
 function readTbl(id){
   var tbl=document.getElementById(id);if(!tbl)return[];
   var rows=tbl.querySelectorAll('tr');var data=[];
@@ -778,16 +708,31 @@ function buildDocTable(D,rows,headerShade){
 }
 
 function doGenerateDocx(){
-  var D=_docxLib;
-  if(!D||!D.Document){
-    toast('docx 라이브러리를 아직 로딩 중입니다. 5초 후 다시 시도합니다...','info');
-    setTimeout(function(){
-      D=window.docx||null;
-      if(D&&D.Document){_docxLib=D;_docxReady=true;doGenerateDocx();}
-      else{toast('docx 라이브러리 로딩에 실패했습니다. 페이지를 새로고침(Ctrl+Shift+R) 해주세요.','error');}
-    },5000);
+  if(!_docxReady){
+    _docxLib = window.docx || null;
+    if(_docxLib && _docxLib.Document) _docxReady = true;
+  }
+  var D = _docxLib;
+  if(!D || !D.Document){
+    toast('docx 라이브러리 로딩 중... 3초 후 자동 재시도합니다.','info');
+    var s = document.createElement('script');
+    s.src = 'https://unpkg.com/docx@7.8.2/build/index.umd.min.js';
+    s.onload = function(){
+      _docxLib = window.docx || null;
+      if(_docxLib && _docxLib.Document){
+        _docxReady = true;
+        doGenerateDocx();
+      } else {
+        toast('docx 라이브러리 로딩 실패. Ctrl+Shift+R로 새로고침 해주세요.','error');
+      }
+    };
+    s.onerror = function(){
+      toast('docx CDN 연결 실패. 인터넷 연결을 확인해주세요.','error');
+    };
+    document.head.appendChild(s);
     return;
   }
+
   try{
     var mon=S.tws.getMonth()+1;
     var wk=weekOfMonth(S.tws);
@@ -811,7 +756,13 @@ function doGenerateDocx(){
     D.Packer.toBlob(doc).then(function(blob){
       var yr=String(S.tws.getFullYear()).slice(2);
       var fname='머니올라_'+yr+'년_'+mon+'월_'+(wk-1)+'주차_보고.docx';
-      saveAs(blob,fname);
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
       toast('문서 생성 완료: '+fname,'success');
     }).catch(function(e){console.error('Packer error:',e);toast('문서 생성 실패: '+e.message,'error');});
   }catch(e){console.error('DOCX error:',e);toast('문서 생성 오류: '+e.message,'error');}
@@ -819,7 +770,6 @@ function doGenerateDocx(){
 
 document.getElementById('btnGen').addEventListener('click',function(){
   if(!_docxReady||!_docxLib){
-    // 한 번 더 window에서 확인
     _docxLib=window.docx||null;
     if(_docxLib&&_docxLib.Document){_docxReady=true;}
   }
