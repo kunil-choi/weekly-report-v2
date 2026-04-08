@@ -166,9 +166,37 @@ label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:blo
 </div>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx@7.7.0/build/index.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 <script>
+/* docx 라이브러리를 동적으로 로드 — 로딩 실패 시 재시도 */
+var _docxReady = false;
+var _docxLib = null;
+function loadDocxLib(cb){
+  if(_docxReady && _docxLib){if(cb)cb();return;}
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/docx@7.7.0/build/index.umd.js';
+  s.onload=function(){
+    _docxLib = window.docx || window.Docx || null;
+    if(_docxLib && _docxLib.Document){_docxReady=true;console.log('docx lib loaded OK');if(cb)cb();}
+    else{console.error('docx lib loaded but Document not found');tryDocxFallback(cb);}
+  };
+  s.onerror=function(){console.error('docx lib load failed, trying fallback');tryDocxFallback(cb);};
+  document.head.appendChild(s);
+}
+function tryDocxFallback(cb){
+  var s2=document.createElement('script');
+  s2.src='https://unpkg.com/docx@7.7.0/build/index.umd.js';
+  s2.onload=function(){
+    _docxLib = window.docx || window.Docx || null;
+    if(_docxLib && _docxLib.Document){_docxReady=true;console.log('docx fallback loaded OK');if(cb)cb();}
+    else{toast('docx 라이브러리 로딩 실패. 페이지를 새로고침 해주세요.','error');}
+  };
+  s2.onerror=function(){toast('docx 라이브러리 로딩 실패. 페이지를 새로고침 해주세요.','error');};
+  document.head.appendChild(s2);
+}
+// 페이지 로드 시 미리 로딩
+loadDocxLib();
+
 var GAS_URL='https://script.google.com/macros/s/AKfycbwmtjpbT8g9dwr2FFIUyAvaRhCH9quBB_pFAiSYfoQXlfWwW8Qs32VXjIzf9itZgmkXgA/exec';
 var S={baseDate:null,lws:null,lwe:null,tws:null,twe:null,lastSch:[],thisSch:[],yt:[],ch:{},ch2:{},ct:{},ct2:{},subs:'',nY:'',nC:''};
 var DK=['일','월','화','수','목','금','토'];
@@ -188,16 +216,18 @@ function V(id){var el=document.getElementById(id);return el?el.value:''}
 function setV(id,val){var el=document.getElementById(id);if(el)el.value=val||''}
 function commaNum(n){return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')}
 
-/* ===== 값 정리 함수: ₩ \ 등 제거, 구독자는 +/- 붙이기 ===== */
+/* ===== 값 정리 함수 ===== */
 function cleanValue(val, fieldId){
   var v = (val||'').trim();
-  // ₩, \, ￦ 기호 제거
-  v = v.replace(/[₩￦\\]/g,'').trim();
-  // 화살표/특수문자 제거
-  v = v.replace(/[↓↑→←▼▲△▽]/g,'').trim();
-  // 구독자 필드: 숫자만 있으면 +를 붙임
+  v = v.replace(/[₩￦\\Ww]/g, function(m){
+    // W나 w가 숫자 앞에 있을 때만 제거 (통화 기호 오인식)
+    return '';
+  });
+  // 더 정밀하게: 앞쪽의 ₩\Ww만 제거
+  v = (val||'').trim();
+  v = v.replace(/^[₩￦\\Ww]+/, '').trim();
+  v = v.replace(/[↓↑→←▼▲△▽]/g, '').trim();
   if(fieldId === 'ch_subs'){
-    // 이미 +나 -가 있으면 그대로
     if(!/^[+\-]/.test(v) && /\d/.test(v)){
       v = '+' + v;
     }
@@ -211,7 +241,7 @@ document.getElementById('curSubs').addEventListener('input',function(e){
   if(v)e.target.value=commaNum(v);else e.target.value='';
 });
 
-/* ===== Step 1: 지난주 보고서 DOCX 파싱 (mammoth) ===== */
+/* ===== Step 1: 지난주 보고서 DOCX 파싱 ===== */
 document.getElementById('fi1').addEventListener('change',function(e){
   var f=e.target.files[0];
   if(!f)return;
@@ -302,241 +332,381 @@ function runOCR(imageFile,statusElId,callback){
 }
 
 /* =======================================================================
-   ★ 채널 현황 OCR 파싱 — 완전 재작성
+   ★ 수정1: 채널 현황 OCR 파싱 — 개별 키워드 줄 탐색 방식
    =======================================================================
-   YouTube Studio 이미지 구조:
-   헤더행: 평균 시청 지속 시간 | 재생 기반 CPM | RPM | 조회수 ↓ | 구독자 | 예상 수익 | 노출 클릭률
-   값행:   9:18              | ₩6,414      | ₩2,911 | 1,950,015 | 3,234 | ₩5,235,513 | 5.7%
+   문제: 헤더와 값이 한 줄에 나오지 않고, 헤더행 split이 부정확함.
    
-   문제: OCR이 탭/다중 공백으로 구분하지만, 헤더 텍스트 자체에도 공백이 있어
-         단순 split으로는 열을 정확히 분리하기 어려움.
-   
-   해결: 각 줄에서 키워드를 개별적으로 탐색하고, 키워드 위치(x좌표)를 기준으로
-         값 줄의 해당 위치에 있는 값을 매칭하는 전략 사용.
-         + 추가로 줄 단위 키워드-값 매칭 fallback.
+   새 전략: 모든 줄을 순회하면서 각 키워드를 찾고,
+   같은 줄 또는 바로 다음 줄에서 해당 값을 추출.
+   각 필드별 전용 패턴 사용.
    ======================================================================= */
 function parseChannelOCR(text){
-  console.log('parseChannelOCR input:', text);
+  console.log('=== parseChannelOCR 시작 ===');
+  console.log('input:', text);
 
-  var mapping = [
-    {keywords: ['조회수','조회 수','조회수 ↓','조회수↓'], id: 'ch_views'},
-    {keywords: ['구독자'], id: 'ch_subs'},
-    {keywords: ['예상 수익','예상수익','예상 수이','수익'], id: 'ch_rev'},
-    {keywords: ['재생 기반 CPM','재생기반 CPM','재생 기반CPM','기반 CPM'], id: 'ch_cpm'},
-    {keywords: ['RPM'], id: 'ch_rpm'},
-    {keywords: ['노출 클릭률','노출 클릭율','노출클릭률','클릭률','클릭율'], id: 'ch_ctr'},
-    {keywords: ['평균 시청 지속','평균시청지속','평균 시청 지속 시간','평균시청시간','지속 시간','지속시간','시청 지속'], id: 'ch_avg'}
+  // 전처리: 모든 줄
+  var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
+  console.log('줄 수:', lines.length);
+  for(var i=0;i<lines.length;i++) console.log('L'+i+':', lines[i]);
+
+  // 전체 텍스트를 하나로 합침 (줄바꿈 → 공백)
+  var fullText = lines.join(' ');
+
+  // ===== 방법1: 테이블 형태 (헤더행 + 값행) 감지 =====
+  // 헤더행: 여러 키워드가 한 줄에 있음
+  var headerIdx = -1;
+  var bestScore = 0;
+  var allKeywords = ['조회수','구독자','수익','CPM','RPM','클릭률','클릭율','시청 지속','시청지속'];
+  for(var i=0;i<lines.length;i++){
+    var score=0;
+    for(var k=0;k<allKeywords.length;k++){
+      if(lines[i].indexOf(allKeywords[k])>-1) score++;
+    }
+    if(score>bestScore){bestScore=score;headerIdx=i;}
+  }
+  console.log('헤더행 idx:', headerIdx, 'score:', bestScore);
+
+  if(headerIdx>=0 && bestScore>=3){
+    // 헤더행과 값행을 위치 기반으로 매칭
+    var hLine = lines[headerIdx];
+    
+    // 값행 찾기: 헤더 다음에 숫자가 많은 줄
+    var valIdx = -1;
+    for(var vi=headerIdx+1; vi<Math.min(headerIdx+4, lines.length); vi++){
+      if(/\d/.test(lines[vi])){valIdx=vi;break;}
+    }
+    
+    if(valIdx>=0){
+      console.log('헤더행:', hLine);
+      console.log('값행:', lines[valIdx]);
+      
+      // 매핑 정의: 키워드 → 필드ID, 헤더에서의 위치
+      var fieldDefs = [
+        {kw:['평균 시청 지속','평균시청지속','시청 지속 시간','시청지속시간','시청 지속'], id:'ch_avg'},
+        {kw:['재생 기반 CPM','재생기반 CPM','기반 CPM','재생 기반'], id:'ch_cpm'},
+        {kw:['RPM'], id:'ch_rpm'},
+        {kw:['조회수'], id:'ch_views'},
+        {kw:['구독자'], id:'ch_subs'},
+        {kw:['예상 수익','예상수익','수익'], id:'ch_rev'},
+        {kw:['노출 클릭률','노출 클릭율','클릭률','클릭율'], id:'ch_ctr'}
+      ];
+      
+      // 각 필드의 헤더 위치 찾기
+      var found = [];
+      for(var fi=0;fi<fieldDefs.length;fi++){
+        var def=fieldDefs[fi];
+        var pos=-1, matchedKw='';
+        // 가장 긴 키워드부터 시도
+        var sorted=def.kw.slice().sort(function(a,b){return b.length-a.length;});
+        for(var ki=0;ki<sorted.length;ki++){
+          var p=hLine.indexOf(sorted[ki]);
+          if(p>-1){pos=p;matchedKw=sorted[ki];break;}
+        }
+        if(pos>-1){
+          found.push({id:def.id, pos:pos, kw:matchedKw, endPos:pos+matchedKw.length});
+        }
+      }
+      found.sort(function(a,b){return a.pos-b.pos;});
+      console.log('발견된 필드:', found.map(function(f){return f.kw+'@'+f.pos;}));
+      
+      // 값행을 같은 수의 파트로 분리
+      var vLine = lines[valIdx];
+      var vParts = vLine.split(/\t+|\s{2,}/).map(function(s){return s.trim();}).filter(function(s){return s.length>0;});
+      console.log('값 파트:', vParts);
+      
+      if(found.length === vParts.length){
+        // 1:1 매칭
+        for(var pi=0;pi<found.length;pi++){
+          var v = cleanValue(vParts[pi], found[pi].id);
+          console.log('1:1 매칭:', found[pi].kw, '->', found[pi].id, '=', v);
+          setV(found[pi].id, v);
+        }
+      } else {
+        // 위치 기반 매칭
+        var valPositions=[];
+        var sf=0;
+        for(var vi2=0;vi2<vParts.length;vi2++){
+          var idx=vLine.indexOf(vParts[vi2],sf);
+          valPositions.push({val:vParts[vi2],pos:idx,center:idx+vParts[vi2].length/2});
+          sf=idx+vParts[vi2].length;
+        }
+        for(var fi2=0;fi2<found.length;fi2++){
+          var hCenter=found[fi2].pos+(found[fi2].endPos-found[fi2].pos)/2;
+          var bestDist=99999,bestV='';
+          for(var vi3=0;vi3<valPositions.length;vi3++){
+            var dist=Math.abs(hCenter-valPositions[vi3].center);
+            if(dist<bestDist){bestDist=dist;bestV=valPositions[vi3].val;}
+          }
+          var cv=cleanValue(bestV, found[fi2].id);
+          console.log('위치 매칭:', found[fi2].kw, '->', found[fi2].id, '=', cv);
+          setV(found[fi2].id, cv);
+        }
+      }
+    }
+  }
+
+  // ===== 방법2: 누락된 필드를 줄 단위로 보완 =====
+  var fieldMap = [
+    {id:'ch_views', kw:['조회수','조회 수'], pattern:/[\d,]+/},
+    {id:'ch_subs', kw:['구독자'], pattern:/[\d,]+/},
+    {id:'ch_rev', kw:['예상 수익','예상수익','수익'], pattern:/[\d,]+/},
+    {id:'ch_cpm', kw:['재생 기반 CPM','재생기반','기반 CPM','CPM'], pattern:/[\d,]+/},
+    {id:'ch_rpm', kw:['RPM'], pattern:/[\d,]+/},
+    {id:'ch_ctr', kw:['노출 클릭률','노출 클릭율','클릭률','클릭율'], pattern:/[\d\.]+%/},
+    {id:'ch_avg', kw:['평균 시청 지속','시청 지속','지속 시간','지속시간'], pattern:/\d+:\d+|\d+분\s*\d+초/}
   ];
 
-  var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
-
-  /* ===== 전략 A: 헤더행 위치 기반 매칭 ===== */
-  var headerLineIdx = -1;
-  var bestScore = 0;
-  for (var i = 0; i < lines.length; i++) {
-    var score = 0;
-    for (var mi = 0; mi < mapping.length; mi++) {
-      for (var ki = 0; ki < mapping[mi].keywords.length; ki++) {
-        if (lines[i].indexOf(mapping[mi].keywords[ki]) > -1) { score++; break; }
+  for(var fi=0;fi<fieldMap.length;fi++){
+    if(V(fieldMap[fi].id)) continue; // 이미 값 있으면 건너뜀
+    var fm=fieldMap[fi];
+    
+    for(var li=0;li<lines.length;li++){
+      var line=lines[li];
+      var hasKw=false;
+      for(var ki=0;ki<fm.kw.length;ki++){
+        if(line.indexOf(fm.kw[ki])>-1){hasKw=true;break;}
       }
-    }
-    if (score > bestScore) { bestScore = score; headerLineIdx = i; }
-  }
-  console.log('headerLineIdx:', headerLineIdx, 'score:', bestScore, 'line:', lines[headerLineIdx]);
-
-  if (headerLineIdx >= 0 && bestScore >= 3) {
-    var headerLine = lines[headerLineIdx];
-
-    // 각 매핑 키워드의 시작 위치(x좌표)를 찾기
-    var positions = []; // {id, pos, keyword}
-    for (var mi = 0; mi < mapping.length; mi++) {
-      var bestPos = -1;
-      var bestKw = '';
-      // 가장 긴 키워드부터 매칭 시도 (더 정확)
-      var sortedKw = mapping[mi].keywords.slice().sort(function(a,b){return b.length - a.length;});
-      for (var ki = 0; ki < sortedKw.length; ki++) {
-        var pos = headerLine.indexOf(sortedKw[ki]);
-        if (pos > -1) { bestPos = pos; bestKw = sortedKw[ki]; break; }
+      if(!hasKw) continue;
+      
+      // 같은 줄에서 값 찾기 (키워드 뒤쪽)
+      var match=line.match(fm.pattern);
+      if(match){
+        var v=cleanValue(match[0], fm.id);
+        console.log('보완 매칭(같은줄):', fm.id, '=', v);
+        setV(fm.id, v);
+        break;
       }
-      if (bestPos > -1) {
-        positions.push({id: mapping[mi].id, pos: bestPos, keyword: bestKw, endPos: bestPos + bestKw.length});
-      }
-    }
-    // 위치순 정렬
-    positions.sort(function(a,b){ return a.pos - b.pos; });
-    console.log('헤더 위치:', positions.map(function(p){return p.keyword+'('+p.pos+')'}));
-
-    // 값 줄 찾기 (헤더 바로 다음 줄)
-    var valueLineIdx = headerLineIdx + 1;
-    // 값 줄이 빈 줄이면 다음 줄로
-    while (valueLineIdx < lines.length && lines[valueLineIdx].replace(/\s/g,'').length === 0) {
-      valueLineIdx++;
-    }
-    if (valueLineIdx < lines.length) {
-      var valueLine = lines[valueLineIdx];
-      console.log('값 줄:', valueLine);
-
-      // 값 줄을 구분자로 분리: 탭 또는 2개 이상 공백 또는 |
-      var valueParts = valueLine.split(/\t+|\s{2,}|\|/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
-      console.log('값 파트:', valueParts);
-
-      // 헤더 개수와 값 개수가 같으면 1:1 매핑
-      if (positions.length === valueParts.length) {
-        console.log('헤더-값 개수 일치:', positions.length);
-        for (var pi = 0; pi < positions.length; pi++) {
-          var cleaned = cleanValue(valueParts[pi], positions[pi].id);
-          console.log('매칭:', positions[pi].keyword, '->', positions[pi].id, '=', cleaned);
-          setV(positions[pi].id, cleaned);
+      // 다음 줄에서 찾기
+      if(li+1<lines.length){
+        var match2=lines[li+1].match(fm.pattern);
+        if(match2){
+          var v2=cleanValue(match2[0], fm.id);
+          console.log('보완 매칭(다음줄):', fm.id, '=', v2);
+          setV(fm.id, v2);
+          break;
         }
-      }
-      // 개수가 다르면 위치 기반으로 가장 가까운 값을 매칭
-      else {
-        console.log('헤더-값 개수 불일치. 헤더:', positions.length, '값:', valueParts.length);
-        // 각 값 파트의 시작 위치를 추정
-        var valPositions = [];
-        var searchFrom = 0;
-        for (var vi = 0; vi < valueParts.length; vi++) {
-          var idx = valueLine.indexOf(valueParts[vi], searchFrom);
-          valPositions.push(idx);
-          searchFrom = idx + valueParts[vi].length;
-        }
-        console.log('값 위치:', valPositions);
-
-        for (var pi = 0; pi < positions.length; pi++) {
-          // 이 헤더의 중심 x좌표
-          var headerCenter = positions[pi].pos + positions[pi].keyword.length / 2;
-          // 가장 가까운 값 찾기
-          var bestDist = 99999, bestVI = -1;
-          for (var vi = 0; vi < valPositions.length; vi++) {
-            var valCenter = valPositions[vi] + valueParts[vi].length / 2;
-            var dist = Math.abs(headerCenter - valCenter);
-            if (dist < bestDist) { bestDist = dist; bestVI = vi; }
-          }
-          if (bestVI >= 0) {
-            var cleaned = cleanValue(valueParts[bestVI], positions[pi].id);
-            console.log('위치 매칭:', positions[pi].keyword, '->', positions[pi].id, '=', cleaned, '(dist:', bestDist, ')');
-            setV(positions[pi].id, cleaned);
-          }
-        }
-      }
-
-      console.log('전략A 결과:', {
-        views: V('ch_views'), subs: V('ch_subs'), rev: V('ch_rev'),
-        cpm: V('ch_cpm'), rpm: V('ch_rpm'), ctr: V('ch_ctr'), avg: V('ch_avg')
-      });
-      return;
-    }
-  }
-
-  /* ===== 전략 B: 줄 단위 키워드-값 매칭 (fallback) ===== */
-  console.log('전략B: 줄 단위 키워드-값 매칭');
-  
-  // 모든 줄을 순회하며 키워드가 있는 줄에서 값 추출
-  for (var i = 0; i < lines.length; i++) {
-    var line = lines[i];
-    for (var mi = 0; mi < mapping.length; mi++) {
-      if (V(mapping[mi].id)) continue; // 이미 값이 있으면 건너뜀
-      var matched = false;
-      for (var ki = 0; ki < mapping[mi].keywords.length; ki++) {
-        if (line.indexOf(mapping[mi].keywords[ki]) > -1) { matched = true; break; }
-      }
-      if (!matched) continue;
-
-      // 시간 형식 (평균 시청 지속 시간용)
-      if (mapping[mi].id === 'ch_avg') {
-        var timeMatch = line.match(/\d+:\d+|\d+분\s*\d+초/);
-        if (timeMatch) { setV(mapping[mi].id, timeMatch[0]); continue; }
-        // 같은 줄에 없으면 다음 줄 확인
-        if (i + 1 < lines.length) {
-          var tm2 = lines[i+1].match(/\d+:\d+|\d+분\s*\d+초/);
-          if (tm2) { setV(mapping[mi].id, tm2[0]); continue; }
-        }
-      }
-
-      // 일반 숫자/금액 추출
-      // 키워드를 제거한 나머지 부분에서 값 추출
-      var rest = line;
-      for (var ki = 0; ki < mapping[mi].keywords.length; ki++) {
-        rest = rest.replace(mapping[mi].keywords[ki], '');
-      }
-      var numMatch = rest.match(/[₩￦\\]?[\d,\.]+[만원%]?/);
-      if (numMatch) {
-        setV(mapping[mi].id, cleanValue(numMatch[0], mapping[mi].id));
-        continue;
-      }
-      // 같은 줄에서 못 찾으면 다음 줄
-      if (i + 1 < lines.length) {
-        var nm2 = lines[i+1].match(/[₩￦\\]?[\d,\.]+[만원%]?/);
-        if (nm2) { setV(mapping[mi].id, cleanValue(nm2[0], mapping[mi].id)); }
       }
     }
   }
 
-  console.log('전략B 결과:', {
-    views: V('ch_views'), subs: V('ch_subs'), rev: V('ch_rev'),
-    cpm: V('ch_cpm'), rpm: V('ch_rpm'), ctr: V('ch_ctr'), avg: V('ch_avg')
+  // ===== 방법3: 전체 텍스트에서 시간 패턴으로 평균 시청 지속시간 찾기 =====
+  if(!V('ch_avg')){
+    var timeMatch = fullText.match(/\d+:\d+/);
+    if(timeMatch){
+      console.log('시간 패턴으로 평균 시청 지속시간 발견:', timeMatch[0]);
+      setV('ch_avg', timeMatch[0]);
+    }
+  }
+
+  // ===== 방법4: 전체 텍스트에서 가장 큰 숫자를 조회수로 =====
+  if(!V('ch_views')){
+    var allNums = fullText.match(/[\d,]+/g);
+    if(allNums){
+      var maxNum=0, maxStr='';
+      for(var ni=0;ni<allNums.length;ni++){
+        var n=parseInt(allNums[ni].replace(/,/g,''),10);
+        if(n>maxNum && n>10000){maxNum=n;maxStr=allNums[ni];}
+      }
+      if(maxStr){
+        console.log('최대 숫자로 조회수 추정:', maxStr);
+        setV('ch_views', maxStr);
+      }
+    }
+  }
+
+  console.log('=== parseChannelOCR 최종 결과 ===');
+  console.log({
+    views:V('ch_views'), subs:V('ch_subs'), rev:V('ch_rev'),
+    cpm:V('ch_cpm'), rpm:V('ch_rpm'), ctr:V('ch_ctr'), avg:V('ch_avg')
   });
 }
 
 /* =======================================================================
-   ★ 콘텐츠 유형 OCR 파싱 (헤더 인식 + 행 레이블 매칭)
+   ★ 수정2: 콘텐츠 유형 OCR 파싱
+   =======================================================================
+   이미지 구조:
+     콘텐츠 유형 | 조회수          | 시청 시간(단위: 시간) | 평균 시청 지속 시간
+     합계        | 484,566         | 60,439.1             | 9:16
+     동영상      | 326,261  67.3%  | 59,592.5  98.6%      | 11:05
+     Shorts      | 158,426  32.7%  | 855.6     1.4%       | 0:44
+   
+   출력 형식: "32.6만(67.3%)" — 숫자를 만 단위로 변환 + 퍼센트 괄호
    ======================================================================= */
-function parseContentOCR(text){
-  console.log('parseContentOCR input:', text);
-  var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
+function formatManPercent(numStr, pctStr){
+  // numStr: "326,261" → "32.6만"
+  // pctStr: "67.3%" → "(67.3%)"
+  var n = parseFloat((numStr||'').replace(/,/g,''));
+  var pct = (pctStr||'').replace(/[()]/g,'').trim();
+  if(!pct.match(/%$/)) pct = pct + '%';
+  
+  if(isNaN(n)) return numStr + '(' + pct + ')';
+  
+  if(n >= 10000){
+    // 만 단위
+    var man = n / 10000;
+    var manStr = man >= 100 ? Math.round(man) + '만' : 
+                 man >= 10 ? man.toFixed(1).replace(/\.0$/,'') + '만' : 
+                 man.toFixed(1).replace(/\.0$/,'') + '만';
+    return manStr + '(' + pct + ')';
+  } else if(n >= 1000){
+    // 천 단위: 콤마 표시
+    return commaNum(Math.round(n)) + '(' + pct + ')';
+  } else {
+    // 소수점 포함 가능
+    var str = n % 1 === 0 ? String(n) : n.toFixed(1);
+    return str + '(' + pct + ')';
+  }
+}
 
-  var headerIdx = -1;
-  for (var i = 0; i < lines.length; i++) {
-    if (/조회\s*수/.test(lines[i]) && /시청/.test(lines[i])) {
-      headerIdx = i;
+function parseContentOCR(text){
+  console.log('=== parseContentOCR 시작 ===');
+  console.log('input:', text);
+  
+  var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
+  for(var i=0;i<lines.length;i++) console.log('CL'+i+':', lines[i]);
+
+  // 동영상/Shorts 행에서 숫자+퍼센트 쌍 추출
+  // 예: "326,261 67.3%" 또는 "326,261  67.3%  59,592.5  98.6%  11:05"
+  
+  var videoData = null;  // {viewNum, viewPct, watchNum, watchPct}
+  var shortsData = null;
+
+  for(var i=0;i<lines.length;i++){
+    var line = lines[i];
+    var isVideo = /동영상/.test(line) && !/합계/.test(line);
+    var isShorts = /[Ss]horts|쇼츠/.test(line);
+    
+    if(!isVideo && !isShorts) continue;
+    console.log((isVideo?'동영상':'Shorts')+' 행:', line);
+    
+    // 숫자와 퍼센트를 모두 추출
+    // 패턴: 숫자(콤마/점 포함) 와 퍼센트
+    var allNumbers = [];
+    var allPercents = [];
+    
+    // 숫자 추출 (시간 형식 제외)
+    var numRegex = /[\d,]+\.?\d*/g;
+    var m;
+    while((m = numRegex.exec(line)) !== null){
+      var val = m[0];
+      // 시간 형식인지 확인 (앞뒤에 :가 있으면 제외)
+      var beforeChar = m.index > 0 ? line[m.index-1] : '';
+      var afterEnd = m.index + val.length;
+      var afterChar = afterEnd < line.length ? line[afterEnd] : '';
+      if(beforeChar === ':' || afterChar === ':') continue;
+      allNumbers.push({val: val, pos: m.index});
+    }
+    
+    // 퍼센트 추출
+    var pctRegex = /([\d\.]+)\s*%/g;
+    while((m = pctRegex.exec(line)) !== null){
+      allPercents.push({val: m[1]+'%', pos: m.index, numVal: m[1]});
+    }
+    
+    console.log('  숫자들:', allNumbers.map(function(x){return x.val;}));
+    console.log('  퍼센트들:', allPercents.map(function(x){return x.val;}));
+    
+    // 퍼센트와 짝이 되는 숫자 찾기
+    // 일반적으로: 숫자 퍼센트 숫자 퍼센트 형태
+    // 퍼센트 숫자를 allNumbers에서 제거
+    var pctNums = {};
+    for(var pi=0;pi<allPercents.length;pi++){
+      pctNums[allPercents[pi].numVal] = true;
+    }
+    
+    // 순수 데이터 숫자만 (퍼센트의 숫자 부분 제외)
+    var dataNums = [];
+    for(var ni=0;ni<allNumbers.length;ni++){
+      var isPartOfPct = false;
+      for(var pi=0;pi<allPercents.length;pi++){
+        // 퍼센트 바로 앞의 숫자인지 확인
+        var pctNumStart = allPercents[pi].pos;
+        var numEnd = allNumbers[ni].pos + allNumbers[ni].val.length;
+        if(Math.abs(numEnd - pctNumStart) <= 2 || 
+           allNumbers[ni].val === allPercents[pi].numVal){
+          // 이 숫자의 위치가 퍼센트 숫자와 겹치면
+          var nClean = allNumbers[ni].val.replace(/,/g,'');
+          if(nClean === allPercents[pi].numVal || 
+             parseFloat(nClean) === parseFloat(allPercents[pi].numVal)){
+            isPartOfPct = true;
+            break;
+          }
+        }
+      }
+      if(!isPartOfPct){
+        dataNums.push(allNumbers[ni]);
+      }
+    }
+    console.log('  데이터 숫자:', dataNums.map(function(x){return x.val;}));
+    
+    // 조회수 = 첫 번째 데이터 숫자 + 첫 번째 퍼센트
+    // 시청 시간 = 두 번째 데이터 숫자 + 두 번째 퍼센트
+    var result = {viewNum:'', viewPct:'', watchNum:'', watchPct:''};
+    
+    if(dataNums.length >= 1 && allPercents.length >= 1){
+      result.viewNum = dataNums[0].val;
+      result.viewPct = allPercents[0].val;
+    }
+    if(dataNums.length >= 2 && allPercents.length >= 2){
+      result.watchNum = dataNums[1].val;
+      result.watchPct = allPercents[1].val;
+    }
+    
+    console.log('  추출:', result);
+    
+    if(isVideo) videoData = result;
+    if(isShorts) shortsData = result;
+  }
+
+  // 헤더 열 순서 확인 (조회수가 먼저인지 시청 시간이 먼저인지)
+  var colOrder = 'views_first'; // 기본값
+  for(var i=0;i<lines.length;i++){
+    if(/조회\s*수/.test(lines[i]) && /시청/.test(lines[i])){
+      var vp = lines[i].search(/조회\s*수/);
+      var wp = lines[i].search(/시청/);
+      if(wp >= 0 && vp >= 0 && wp < vp){
+        colOrder = 'watch_first';
+      }
       break;
     }
   }
+  console.log('열 순서:', colOrder);
 
-  var colOrder = ['views', 'watch'];
-  if (headerIdx >= 0) {
-    var viewsPos = lines[headerIdx].search(/조회\s*수/);
-    var watchPos = lines[headerIdx].search(/시청/);
-    if (watchPos >= 0 && viewsPos >= 0 && watchPos < viewsPos) {
-      colOrder = ['watch', 'views'];
+  // 필드에 값 설정
+  if(videoData){
+    var vView = videoData.viewNum && videoData.viewPct ? 
+                formatManPercent(videoData.viewNum, videoData.viewPct) : '';
+    var vWatch = videoData.watchNum && videoData.watchPct ? 
+                 formatManPercent(videoData.watchNum, videoData.watchPct) : '';
+    
+    if(colOrder === 'views_first'){
+      setV('ct_vv', vView);
+      setV('ct_vw', vWatch);
+    } else {
+      setV('ct_vw', vView);
+      setV('ct_vv', vWatch);
     }
+    console.log('동영상 → 조회수:', V('ct_vv'), '시청시간:', V('ct_vw'));
+  }
+  
+  if(shortsData){
+    var sView = shortsData.viewNum && shortsData.viewPct ? 
+                formatManPercent(shortsData.viewNum, shortsData.viewPct) : '';
+    var sWatch = shortsData.watchNum && shortsData.watchPct ? 
+                 formatManPercent(shortsData.watchNum, shortsData.watchPct) : '';
+    
+    if(colOrder === 'views_first'){
+      setV('ct_sv', sView);
+      setV('ct_sw', sWatch);
+    } else {
+      setV('ct_sw', sView);
+      setV('ct_sv', sWatch);
+    }
+    console.log('Shorts → 조회수:', V('ct_sv'), '시청시간:', V('ct_sw'));
   }
 
-  var valuePattern = /[\d,\.]+만?\s*\(\s*[\d,\.]+\s*%\s*\)/g;
-  var loosePattern = /[\d,\.]+만?/g;
-  var searchStart = (headerIdx >= 0) ? headerIdx + 1 : 0;
-
-  for (var i = searchStart; i < lines.length; i++) {
-    var line = lines[i];
-    var isVideo = /동영상/.test(line);
-    var isShorts = /쇼츠|[Ss]horts/.test(line);
-    if (!isVideo && !isShorts) continue;
-
-    var matches = line.match(valuePattern);
-    if (!matches || matches.length < 2) {
-      var combined = line;
-      if (i + 1 < lines.length) combined += ' ' + lines[i + 1];
-      matches = combined.match(valuePattern);
-    }
-    if (!matches || matches.length < 2) {
-      var cleaned = line.replace(/동영상|쇼츠|[Ss]horts|콘텐츠\s*유형/g, '').trim();
-      if (i + 1 < lines.length) cleaned += ' ' + lines[i + 1];
-      matches = cleaned.match(loosePattern);
-      if (matches && matches.length > 2) matches = matches.slice(0, 2);
-    }
-
-    if (matches && matches.length >= 2) {
-      if (isVideo) {
-        if (colOrder[0] === 'views') { setV('ct_vv', matches[0].trim()); setV('ct_vw', matches[1].trim()); }
-        else { setV('ct_vw', matches[0].trim()); setV('ct_vv', matches[1].trim()); }
-      }
-      if (isShorts) {
-        if (colOrder[0] === 'views') { setV('ct_sv', matches[0].trim()); setV('ct_sw', matches[1].trim()); }
-        else { setV('ct_sw', matches[0].trim()); setV('ct_sv', matches[1].trim()); }
-      }
-    }
-  }
-  console.log('parseContentOCR 결과:', {vv:V('ct_vv'),vw:V('ct_vw'),sv:V('ct_sv'),sw:V('ct_sw')});
+  console.log('=== parseContentOCR 최종 결과 ===');
+  console.log({vv:V('ct_vv'),vw:V('ct_vw'),sv:V('ct_sv'),sw:V('ct_sw')});
 }
 
 /* Step 3 이미지 */
@@ -674,7 +844,9 @@ function buildPreview(){
   a.innerHTML=h;
 }
 
-/* ===== DOCX 생성 ===== */
+/* =======================================================================
+   ★ 수정3: DOCX 생성 — 동적 로딩 + 안전한 참조
+   ======================================================================= */
 function readTbl(id){
   var tbl=document.getElementById(id);if(!tbl)return[];
   var rows=tbl.querySelectorAll('tr');var data=[];
@@ -686,145 +858,114 @@ function readTbl(id){
   return data;
 }
 
-function buildDocTable(rows, headerShade) {
-  var D = window.docx;
-  var tblRows = [];
-  for (var ri = 0; ri < rows.length; ri++) {
-    var cells = [];
-    for (var ci = 0; ci < rows[ri].length; ci++) {
-      var isHeader = (ri === 0);
-      var cellOpts = {
-        children: [
-          new D.Paragraph({
-            children: [
-              new D.TextRun({
-                text: rows[ri][ci],
-                bold: isHeader,
-                size: 20,
-                font: 'Malgun Gothic'
-              })
-            ],
-            spacing: { after: 40 }
-          })
-        ],
-        verticalAlign: D.VerticalAlign.CENTER,
-        margins: { top: 40, bottom: 40, left: 60, right: 60 }
+function buildDocTable(D, rows, headerShade){
+  var tblRows=[];
+  for(var ri=0;ri<rows.length;ri++){
+    var cells=[];
+    for(var ci=0;ci<rows[ri].length;ci++){
+      var isH=(ri===0);
+      var cellOpts={
+        children:[new D.Paragraph({
+          children:[new D.TextRun({text:rows[ri][ci]||'',bold:isH,size:20,font:'Malgun Gothic'})],
+          spacing:{after:40}
+        })],
+        verticalAlign:D.VerticalAlign.CENTER,
+        margins:{top:40,bottom:40,left:60,right:60}
       };
-      if (isHeader && headerShade) {
-        cellOpts.shading = { fill: headerShade, type: D.ShadingType.CLEAR };
+      if(isH && headerShade){
+        cellOpts.shading={fill:headerShade,type:D.ShadingType.CLEAR};
       }
       cells.push(new D.TableCell(cellOpts));
     }
-    tblRows.push(new D.TableRow({ children: cells }));
+    tblRows.push(new D.TableRow({children:cells}));
   }
-  return new D.Table({
-    rows: tblRows,
-    width: { size: 9000, type: D.WidthType.DXA }
-  });
+  return new D.Table({rows:tblRows,width:{size:9000,type:D.WidthType.DXA}});
 }
 
-document.getElementById('btnGen').addEventListener('click', function () {
-  try {
-    var D = window.docx;
-    if (!D || !D.Document) {
-      toast('docx 라이브러리 로딩 실패. 페이지를 새로고침 해주세요.', 'error');
-      return;
-    }
-    var mon = S.tws.getMonth() + 1;
-    var wk = weekOfMonth(S.tws);
+function doGenerateDocx(){
+  var D = _docxLib;
+  if(!D || !D.Document){
+    toast('docx 라이브러리가 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요.','error');
+    loadDocxLib(function(){toast('라이브러리 로드 완료. 다시 버튼을 눌러주세요.','info');});
+    return;
+  }
+  
+  try{
+    var mon=S.tws.getMonth()+1;
+    var wk=weekOfMonth(S.tws);
+    var children=[];
 
-    var children = [];
-
-    // 제목
     children.push(new D.Paragraph({
-      children: [new D.TextRun({
-        text: '■ 머니올라 ' + mon + '월 ' + (wk - 1) + '주차 실적 및 ' + mon + '월 ' + wk + '주차 계획',
-        bold: true, size: 28, font: 'Malgun Gothic'
-      })],
-      spacing: { after: 200 }
+      children:[new D.TextRun({text:'■ 머니올라 '+mon+'월 '+(wk-1)+'주차 실적 및 '+mon+'월 '+wk+'주차 계획',bold:true,size:28,font:'Malgun Gothic'})],
+      spacing:{after:200}
     }));
 
-    // 업로드 일정 테이블
-    var t1 = readTbl('t1');
-    if (t1.length) children.push(buildDocTable(t1, 'D9E2F3'));
-    children.push(new D.Paragraph({ text: '', spacing: { after: 200 } }));
+    var t1=readTbl('t1');
+    if(t1.length) children.push(buildDocTable(D,t1,'D9E2F3'));
+    children.push(new D.Paragraph({text:'',spacing:{after:200}}));
 
-    // 채널 현황
     children.push(new D.Paragraph({
-      children: [new D.TextRun({
-        text: '■ 채널 현황 (' + fmtShort(S.lws) + '~' + fmtShort(S.lwe) + ')',
-        bold: true, size: 24, font: 'Malgun Gothic'
-      })],
-      spacing: { before: 300, after: 200 }
+      children:[new D.TextRun({text:'■ 채널 현황 ('+fmtShort(S.lws)+'~'+fmtShort(S.lwe)+')',bold:true,size:24,font:'Malgun Gothic'})],
+      spacing:{before:300,after:200}
     }));
-    var t2 = readTbl('t2');
-    if (t2.length) children.push(buildDocTable(t2, 'E2EFDA'));
-    children.push(new D.Paragraph({ text: '', spacing: { after: 200 } }));
+    var t2=readTbl('t2');
+    if(t2.length) children.push(buildDocTable(D,t2,'E2EFDA'));
+    children.push(new D.Paragraph({text:'',spacing:{after:200}}));
 
-    // 콘텐츠 유형
     children.push(new D.Paragraph({
-      children: [new D.TextRun({
-        text: '■ 콘텐츠 유형별 (' + fmtShort(S.lws) + '~' + fmtShort(S.lwe) + ')',
-        bold: true, size: 24, font: 'Malgun Gothic'
-      })],
-      spacing: { before: 300, after: 200 }
+      children:[new D.TextRun({text:'■ 콘텐츠 유형별 ('+fmtShort(S.lws)+'~'+fmtShort(S.lwe)+')',bold:true,size:24,font:'Malgun Gothic'})],
+      spacing:{before:300,after:200}
     }));
-    var t3 = readTbl('t3');
-    if (t3.length) children.push(buildDocTable(t3, 'FCE4D6'));
-    children.push(new D.Paragraph({ text: '', spacing: { after: 200 } }));
+    var t3=readTbl('t3');
+    if(t3.length) children.push(buildDocTable(D,t3,'FCE4D6'));
+    children.push(new D.Paragraph({text:'',spacing:{after:200}}));
 
-    // 구독자 현황
-    var subsEl = document.getElementById('pSubs');
-    var subsTxt = subsEl ? subsEl.innerText : '';
+    var subsEl=document.getElementById('pSubs');
+    var subsTxt=subsEl?subsEl.innerText:'';
     children.push(new D.Paragraph({
-      children: [new D.TextRun({
-        text: '■ 구독자 현황',
-        bold: true, size: 24, font: 'Malgun Gothic'
-      })],
-      spacing: { before: 300, after: 100 }
+      children:[new D.TextRun({text:'■ 구독자 현황',bold:true,size:24,font:'Malgun Gothic'})],
+      spacing:{before:300,after:100}
     }));
     children.push(new D.Paragraph({
-      children: [new D.TextRun({
-        text: subsTxt, size: 20, font: 'Malgun Gothic'
-      })],
-      spacing: { after: 200 }
+      children:[new D.TextRun({text:subsTxt,size:20,font:'Malgun Gothic'})],
+      spacing:{after:200}
     }));
 
-    // 팀원별 특이사항
     children.push(new D.Paragraph({
-      children: [new D.TextRun({
-        text: '■ 팀원별 특이사항',
-        bold: true, size: 24, font: 'Malgun Gothic'
-      })],
-      spacing: { before: 300, after: 200 }
+      children:[new D.TextRun({text:'■ 팀원별 특이사항',bold:true,size:24,font:'Malgun Gothic'})],
+      spacing:{before:300,after:200}
     }));
-    var t4 = readTbl('t4');
-    if (t4.length) children.push(buildDocTable(t4, 'DDDDDD'));
+    var t4=readTbl('t4');
+    if(t4.length) children.push(buildDocTable(D,t4,'DDDDDD'));
 
-    var doc = new D.Document({
-      sections: [{
-        properties: {
-          page: {
-            size: { width: 12240, height: 15840 },
-            margin: { top: 1000, right: 1000, bottom: 1000, left: 1000 }
-          }
-        },
-        children: children
+    var doc=new D.Document({
+      sections:[{
+        properties:{page:{size:{width:12240,height:15840},margin:{top:1000,right:1000,bottom:1000,left:1000}}},
+        children:children
       }]
     });
 
-    D.Packer.toBlob(doc).then(function (blob) {
-      var yr = String(S.tws.getFullYear()).slice(2);
-      var fname = '머니올라_' + yr + '년_' + mon + '월_' + (wk - 1) + '주차_보고.docx';
-      saveAs(blob, fname);
-      toast('문서 생성 완료: ' + fname, 'success');
-    }).catch(function (e) {
-      console.error('Packer.toBlob error:', e);
-      toast('문서 생성 실패: ' + e.message, 'error');
+    D.Packer.toBlob(doc).then(function(blob){
+      var yr=String(S.tws.getFullYear()).slice(2);
+      var fname='머니올라_'+yr+'년_'+mon+'월_'+(wk-1)+'주차_보고.docx';
+      saveAs(blob,fname);
+      toast('문서 생성 완료: '+fname,'success');
+    }).catch(function(e){
+      console.error('Packer error:',e);
+      toast('문서 생성 실패: '+e.message,'error');
     });
-  } catch (e) {
-    console.error('DOCX 생성 오류:', e);
-    toast('문서 생성 오류: ' + e.message, 'error');
+  }catch(e){
+    console.error('DOCX 생성 오류:',e);
+    toast('문서 생성 오류: '+e.message,'error');
+  }
+}
+
+document.getElementById('btnGen').addEventListener('click',function(){
+  if(!_docxReady){
+    toast('docx 라이브러리 로딩 중... 잠시만 기다려주세요.','info');
+    loadDocxLib(function(){doGenerateDocx();});
+  } else {
+    doGenerateDocx();
   }
 });
 </script>
