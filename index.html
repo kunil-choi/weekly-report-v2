@@ -300,7 +300,6 @@ function parseChannelOCR(text){
 
   var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
 
-  /* 전략1: 헤더행 찾기 - mapping 키워드가 가장 많이 포함된 줄 */
   var headerLineIdx = -1;
   var bestScore = 0;
   for (var i = 0; i < lines.length; i++) {
@@ -341,7 +340,6 @@ function parseChannelOCR(text){
     return;
   }
 
-  /* 전략2: 줄 단위로 키워드-값 매칭 */
   console.log('fallback: line-by-line keyword matching');
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
@@ -352,10 +350,8 @@ function parseChannelOCR(text){
         if (line.indexOf(mapping[mi].keywords[ki]) > -1) { matched = true; break; }
       }
       if (!matched) continue;
-
       var timeMatch = line.match(/\d+분\s*\d+초|\d+:\d+/);
       var numMatch = line.match(/[\d,\.]+[만원%]?/);
-
       if (mapping[mi].id === 'ch_avg') {
         if (timeMatch) { setV(mapping[mi].id, timeMatch[0]); }
         else if (i + 1 < lines.length) {
@@ -371,36 +367,182 @@ function parseChannelOCR(text){
       }
     }
   }
-
   console.log('parseChannelOCR result:', {
     views: V('ch_views'), subs: V('ch_subs'), rev: V('ch_rev'),
     cpm: V('ch_cpm'), rpm: V('ch_rpm'), ctr: V('ch_ctr'), avg: V('ch_avg')
   });
 }
 
-/* ===== 콘텐츠 유형 OCR 파싱 ===== */
+/* =======================================================================
+   ★★★ 콘텐츠 유형 OCR 파싱 (헤더 인식 + 행 레이블 매칭) ★★★
+   =======================================================================
+   이미지 구조 예시:
+     헤더행:  콘텐츠 유형    조회수          시청 시간(시간)
+     데이터:  동영상         34.9만(69.4%)   6.3만(98.7%)
+     데이터:  Shorts         15.4만(30.6%)   828.5(1.3%)
+   
+   전략:
+   1) 열 헤더행 찾기: '조회수'와 '시청' 키워드가 동시에 포함된 줄
+   2) 헤더행에서 각 열의 x좌표(인덱스) 파악
+   3) 데이터행에서 '동영상'/'Shorts' 키워드로 행 식별
+   4) 각 데이터행의 값을 헤더 열 순서에 맞춰 올바른 필드에 배치
+   ======================================================================= */
 function parseContentOCR(text){
   console.log('parseContentOCR input:', text);
+  
   var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
+  console.log('parseContentOCR lines:', lines);
+  
+  /* --- 1단계: 헤더행 찾기 --- */
+  var headerIdx = -1;
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
-    if (line.match(/동영상/i)) {
-      var nums = line.match(/[\d,\.]+만?\s*\([\d,\.]+%\)/g);
-      if (nums && nums.length >= 2) { setV('ct_vv', nums[0]); setV('ct_vw', nums[1]); }
-      else {
-        var n2 = line.match(/[\d,\.]+만?[\s\(]?[\d,\.]*%?\)?/g);
-        if (n2 && n2.length >= 2) { setV('ct_vv', n2[0]); setV('ct_vw', n2[1]); }
-      }
+    // 헤더행은 '조회수'와 '시청' 둘 다 포함해야 함
+    var hasViews = /조회\s*수/.test(line);
+    var hasWatch = /시청/.test(line);
+    if (hasViews && hasWatch) {
+      headerIdx = i;
+      console.log('헤더행 발견 (idx=' + i + '):', line);
+      break;
     }
-    if (line.match(/쇼츠|Shorts|shorts/i)) {
-      var nums = line.match(/[\d,\.]+만?\s*\([\d,\.]+%\)/g);
-      if (nums && nums.length >= 2) { setV('ct_sv', nums[0]); setV('ct_sw', nums[1]); }
-      else {
-        var n2 = line.match(/[\d,\.]+만?[\s\(]?[\d,\.]*%?\)?/g);
-        if (n2 && n2.length >= 2) { setV('ct_sv', n2[0]); setV('ct_sw', n2[1]); }
+  }
+  
+  /* --- 2단계: 헤더 열 순서 파악 --- */
+  // colOrder[0] = 첫 번째 데이터 열의 의미, colOrder[1] = 두 번째 데이터 열의 의미
+  // 기본값: [조회수, 시청시간]
+  var colOrder = ['views', 'watch'];
+  
+  if (headerIdx >= 0) {
+    var headerLine = lines[headerIdx];
+    var viewsPos = headerLine.search(/조회\s*수/);
+    var watchPos = headerLine.search(/시청/);
+    console.log('헤더 위치 - 조회수:', viewsPos, ', 시청:', watchPos);
+    
+    // 시청이 조회수보다 앞에 있으면 순서 뒤집기
+    if (watchPos >= 0 && viewsPos >= 0 && watchPos < viewsPos) {
+      colOrder = ['watch', 'views'];
+      console.log('열 순서 뒤집힘: [시청시간, 조회수]');
+    } else {
+      console.log('열 순서 기본: [조회수, 시청시간]');
+    }
+  }
+  
+  /* --- 3단계: 값 패턴 정의 --- */
+  // "34.9만(69.4%)" 또는 "828.5(1.3%)" 또는 "6.3만(98.7%)" 형식
+  // 더 넓은 패턴: 숫자(콤마/점 포함) + 선택적 '만' + 괄호 안 퍼센트
+  var valuePattern = /[\d,\.]+만?\s*\(\s*[\d,\.]+\s*%\s*\)/g;
+  // 괄호 없는 숫자도 잡는 보조 패턴 (만 단위 등)
+  var loosePattern = /[\d,\.]+만?/g;
+  
+  /* --- 4단계: 데이터행에서 값 추출 --- */
+  var videoValues = null;  // {col1: '...', col2: '...'}
+  var shortsValues = null;
+  
+  // 헤더행 이후의 줄들에서 데이터 찾기
+  var searchStart = (headerIdx >= 0) ? headerIdx + 1 : 0;
+  
+  for (var i = searchStart; i < lines.length; i++) {
+    var line = lines[i];
+    var isVideo = /동영상/.test(line);
+    var isShorts = /쇼츠|[Ss]horts/.test(line);
+    
+    if (!isVideo && !isShorts) continue;
+    
+    console.log((isVideo ? '동영상' : 'Shorts') + ' 행 발견 (idx=' + i + '):', line);
+    
+    // 이 줄에서 "숫자만(퍼센트%)" 패턴 모두 추출
+    var matches = line.match(valuePattern);
+    console.log('  valuePattern 매칭:', matches);
+    
+    if (!matches || matches.length < 2) {
+      // 같은 줄에서 충분한 값을 못 찾으면 다음 줄도 합쳐서 시도
+      var combinedLine = line;
+      if (i + 1 < lines.length) {
+        combinedLine += ' ' + lines[i + 1];
+      }
+      matches = combinedLine.match(valuePattern);
+      console.log('  합친 줄에서 재시도:', matches);
+    }
+    
+    // 그래도 못 찾으면 느슨한 패턴으로
+    if (!matches || matches.length < 2) {
+      // 행 레이블 제거 후 숫자 부분만 추출
+      var cleaned = line.replace(/동영상|쇼츠|[Ss]horts|콘텐츠\s*유형/g, '').trim();
+      if (i + 1 < lines.length) {
+        cleaned += ' ' + lines[i + 1].replace(/동영상|쇼츠|[Ss]horts/g, '').trim();
+      }
+      matches = cleaned.match(loosePattern);
+      console.log('  loosePattern 매칭:', matches);
+      // 느슨한 패턴은 너무 많이 잡힐 수 있으므로 처음 2개만 사용
+      if (matches && matches.length > 2) matches = matches.slice(0, 2);
+    }
+    
+    if (matches && matches.length >= 2) {
+      var vals = { col1: matches[0].trim(), col2: matches[1].trim() };
+      if (isVideo) videoValues = vals;
+      if (isShorts) shortsValues = vals;
+      console.log('  추출된 값:', vals);
+    } else if (matches && matches.length === 1) {
+      // 값이 하나만 있으면 첫 번째 열로 할당
+      var vals = { col1: matches[0].trim(), col2: '' };
+      if (isVideo) videoValues = vals;
+      if (isShorts) shortsValues = vals;
+      console.log('  부분 추출:', vals);
+    }
+  }
+  
+  /* --- 5단계: 헤더 순서에 따라 올바른 필드에 입력 --- */
+  if (videoValues) {
+    if (colOrder[0] === 'views') {
+      setV('ct_vv', videoValues.col1);  // 조회수
+      setV('ct_vw', videoValues.col2);  // 시청 시간
+    } else {
+      setV('ct_vw', videoValues.col1);  // 시청 시간
+      setV('ct_vv', videoValues.col2);  // 조회수
+    }
+    console.log('동영상 → 조회수:', V('ct_vv'), ', 시청시간:', V('ct_vw'));
+  }
+  
+  if (shortsValues) {
+    if (colOrder[0] === 'views') {
+      setV('ct_sv', shortsValues.col1);  // 조회수
+      setV('ct_sw', shortsValues.col2);  // 시청 시간
+    } else {
+      setV('ct_sw', shortsValues.col1);  // 시청 시간
+      setV('ct_sv', shortsValues.col2);  // 조회수
+    }
+    console.log('Shorts → 조회수:', V('ct_sv'), ', 시청시간:', V('ct_sw'));
+  }
+  
+  /* --- 6단계: 헤더행을 못 찾았을 때 fallback (줄 단위 탐색) --- */
+  if (headerIdx < 0) {
+    console.log('헤더행 미발견 → fallback 전략');
+    // 이미 위에서 동영상/Shorts 행에서 값을 찾았다면 그대로 사용
+    // 못 찾았다면 각 줄에서 키워드+값 조합을 탐색
+    if (!videoValues && !shortsValues) {
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        var vals = line.match(valuePattern);
+        if (!vals) continue;
+        
+        // 동영상 데이터가 먼저 나오고 Shorts가 그 다음인 경우
+        if (!videoValues && vals.length >= 2) {
+          videoValues = { col1: vals[0], col2: vals[1] };
+          setV('ct_vv', vals[0]);
+          setV('ct_vw', vals[1]);
+        } else if (videoValues && !shortsValues && vals.length >= 2) {
+          shortsValues = { col1: vals[0], col2: vals[1] };
+          setV('ct_sv', vals[0]);
+          setV('ct_sw', vals[1]);
+        }
       }
     }
   }
+  
+  console.log('parseContentOCR 최종 결과:', {
+    동영상_조회수: V('ct_vv'), 동영상_시청시간: V('ct_vw'),
+    Shorts_조회수: V('ct_sv'), Shorts_시청시간: V('ct_sw')
+  });
 }
 
 /* Step 3 이미지 */
@@ -496,132 +638,126 @@ function buildPreview(){
   var lwD=daysIn(S.lws,S.lwe);
   for(var di=0;di<lwD.length;di++){
     var d=lwD[di];
-    var dateLabel=(di===0)?fmtShort(d)+'('+DK[d.getDay()]+')':d.getDate()+'('+DK[d.getDay()]+')';
-    var sch=null;for(var si=0;si<S.lastSch.length;si++){if(sameDay(S.lastSch[si]._date,d)){sch=S.lastSch[si];break}}
-    var yts=[];for(var yi=0;yi<S.yt.length;yi++){if(sameDay(S.yt[yi]._date,d))yts.push(S.yt[yi])}
-    var upload='',record='',views='';
-    if(yts.length){upload=yts.map(function(v){return v.title}).join(' / ');views=yts.map(function(v){return Number(v.views).toLocaleString()}).join(' / ')}
-    if(sch){if(!upload&&sch.uploadItem)upload=sch.uploadItem;if(sch.studioRecord)record=sch.studioRecord}
-    h+='<tr><td contenteditable="true">'+dateLabel+'</td><td contenteditable="true">'+upload+'</td><td contenteditable="true">'+record+'</td><td contenteditable="true">'+views+'</td></tr>';
+    var dateLabel=fmtShort(d)+'('+DK[d.getDay()]+')';
+    var sch=S.lastSch.filter(function(r){return sameDay(r._date,d)});
+    var upload='-',record='-',views='-';
+    if(sch.length){upload=sch[0].uploadItem||'-';record=sch[0].studioRecord||'-'}
+    var vid=S.yt.filter(function(v){return sameDay(v._date,d)});
+    if(vid.length)views=Number(vid[0].views).toLocaleString();
+    h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+upload+'</td><td contenteditable="true">'+record+'</td><td contenteditable="true">'+views+'</td></tr>';
   }
   var twD=daysIn(S.tws,S.twe);
   for(var di=0;di<twD.length;di++){
     var d=twD[di];
-    var dateLabel=d.getDate()+'('+DK[d.getDay()]+')';
-    var sch=null;for(var si=0;si<S.thisSch.length;si++){if(sameDay(S.thisSch[si]._date,d)){sch=S.thisSch[si];break}}
-    h+='<tr><td contenteditable="true">'+dateLabel+'</td><td contenteditable="true">'+(sch?sch.uploadItem||'':'')+'</td><td contenteditable="true">'+(sch?sch.studioRecord||'':'')+'</td><td contenteditable="true"></td></tr>';
+    var dateLabel=fmtShort(d)+'('+DK[d.getDay()]+')';
+    var sch=S.thisSch.filter(function(r){return sameDay(r._date,d)});
+    var upload='-',record='-';
+    if(sch.length){upload=sch[0].uploadItem||'-';record=sch[0].studioRecord||'-'}
+    h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+upload+'</td><td contenteditable="true">'+record+'</td><td>-</td></tr>';
   }
   h+='</table>';
 
   /* 채널 현황 */
-  h+='<h3 class="mt4">■ 머니올라 채널 현황</h3>';
-  h+='<p style="color:#60a5fa;margin:6px 0">구독자 : <b contenteditable="true">'+(S.subs||'-')+'</b>명 ('+fmtShort(S.tws)+')</p>';
-  var ch2Has=!!(S.ch2.views||S.ch2.rev);
-  h+='<table class="tbl" id="t_ch"><tr><th>기간(월~일)</th><th>조회수</th><th>구독자</th><th>수익(원)</th><th>재생기반CPM(원)</th><th>RPM(원)</th><th>노출 클릭율</th><th>평균시청시간</th></tr>';
-  h+='<tr><td contenteditable="true">'+lwRange+'</td><td contenteditable="true">'+(S.ch.views||'')+'</td><td contenteditable="true">'+(S.ch.subs||'')+'</td><td contenteditable="true">'+(S.ch.rev||'')+'</td><td contenteditable="true">'+(S.ch.cpm||'')+'</td><td contenteditable="true">'+(S.ch.rpm||'')+'</td><td contenteditable="true">'+(S.ch.ctr||'')+'</td><td contenteditable="true">'+(S.ch.avg||'')+'</td></tr>';
-  if(ch2Has){
-    var ppLws=new Date(S.lws);ppLws.setDate(ppLws.getDate()-7);
-    var ppLwe=new Date(S.lws);ppLwe.setDate(ppLwe.getDate()-1);
-    h+='<tr><td contenteditable="true">'+fmtShort(ppLws)+'~'+fmtShort(ppLwe)+'</td><td contenteditable="true">'+(S.ch2.views||'')+'</td><td contenteditable="true">'+(S.ch2.subs||'')+'</td><td contenteditable="true">'+(S.ch2.rev||'')+'</td><td contenteditable="true">'+(S.ch2.cpm||'')+'</td><td contenteditable="true">'+(S.ch2.rpm||'')+'</td><td contenteditable="true">'+(S.ch2.ctr||'')+'</td><td contenteditable="true">'+(S.ch2.avg||'')+'</td></tr>';
-  }
+  h+='<h3>■ 채널 현황 ('+lwRange+')</h3>';
+  h+='<table class="tbl" id="t2"><tr><th></th><th>조회수</th><th>구독자</th><th>예상 수익</th><th>재생 기반 CPM</th><th>RPM</th><th>노출 클릭률</th><th>평균 시청 지속 시간</th></tr>';
+  h+='<tr><td><b>지난주</b></td><td contenteditable="true">'+S.ch.views+'</td><td contenteditable="true">'+S.ch.subs+'</td><td contenteditable="true">'+S.ch.rev+'</td><td contenteditable="true">'+S.ch.cpm+'</td><td contenteditable="true">'+S.ch.rpm+'</td><td contenteditable="true">'+S.ch.ctr+'</td><td contenteditable="true">'+S.ch.avg+'</td></tr>';
+  h+='<tr><td><b>지지난주</b></td><td contenteditable="true">'+S.ch2.views+'</td><td contenteditable="true">'+S.ch2.subs+'</td><td contenteditable="true">'+S.ch2.rev+'</td><td contenteditable="true">'+S.ch2.cpm+'</td><td contenteditable="true">'+S.ch2.rpm+'</td><td contenteditable="true">'+S.ch2.ctr+'</td><td contenteditable="true">'+S.ch2.avg+'</td></tr>';
   h+='</table>';
 
   /* 콘텐츠 유형 */
-  h+='<table class="tbl" id="t_ct"><tr><th>'+lwRange+'</th><th>조회수</th><th>시청 시간</th></tr>';
-  h+='<tr><td>동영상</td><td contenteditable="true">'+(S.ct.vv||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+'</td></tr>';
-  h+='<tr><td>쇼츠</td><td contenteditable="true">'+(S.ct.sv||'')+'</td><td contenteditable="true">'+(S.ct.sw||'')+'</td></tr>';
-  if(S.ct2.vv||S.ct2.sv){
-    var ppLws2=new Date(S.lws);ppLws2.setDate(ppLws2.getDate()-7);
-    var ppLwe2=new Date(S.lws);ppLwe2.setDate(ppLwe2.getDate()-1);
-    h+='<tr><th>'+fmtShort(ppLws2)+'~'+fmtShort(ppLwe2)+'</th><th>조회수</th><th>시청 시간</th></tr>';
-    h+='<tr><td>동영상</td><td contenteditable="true">'+(S.ct2.vv||'')+'</td><td contenteditable="true">'+(S.ct2.vw||'')+'</td></tr>';
-    h+='<tr><td>쇼츠</td><td contenteditable="true">'+(S.ct2.sv||'')+'</td><td contenteditable="true">'+(S.ct2.sw||'')+'</td></tr>';
-  }
+  h+='<h3>■ 콘텐츠 유형별 ('+lwRange+')</h3>';
+  h+='<table class="tbl" id="t3"><tr><th></th><th>조회수</th><th>시청 시간</th></tr>';
+  h+='<tr><td><b>지난주 동영상</b></td><td contenteditable="true">'+S.ct.vv+'</td><td contenteditable="true">'+S.ct.vw+'</td></tr>';
+  h+='<tr><td><b>지난주 Shorts</b></td><td contenteditable="true">'+S.ct.sv+'</td><td contenteditable="true">'+S.ct.sw+'</td></tr>';
+  h+='<tr><td><b>지지난주 동영상</b></td><td contenteditable="true">'+S.ct2.vv+'</td><td contenteditable="true">'+S.ct2.vw+'</td></tr>';
+  h+='<tr><td><b>지지난주 Shorts</b></td><td contenteditable="true">'+S.ct2.sv+'</td><td contenteditable="true">'+S.ct2.sw+'</td></tr>';
   h+='</table>';
 
+  /* 구독자 */
+  h+='<h3>■ 구독자 현황</h3>';
+  h+='<p id="pSubs">현재 구독자 수: <b>'+S.subs+'</b></p>';
+
   /* 팀원 메모 */
-  h+='<table class="tbl" id="t_team"><tr><th>특이 사항(업무/근태)</th><th>특이 사항(업무/근태)</th></tr>';
-  h+='<tr><td>양영은</td><td contenteditable="true">'+(S.nY||'')+'</td></tr>';
-  h+='<tr><td>최건일</td><td contenteditable="true">'+(S.nC||'')+'</td></tr></table>';
+  h+='<h3>■ 팀원별 특이사항</h3>';
+  h+='<table class="tbl" id="t4"><tr><th>팀원</th><th>내용</th></tr>';
+  h+='<tr><td>양영은</td><td contenteditable="true">'+(S.nY||'-')+'</td></tr>';
+  h+='<tr><td>최건일</td><td contenteditable="true">'+(S.nC||'-')+'</td></tr>';
+  h+='</table>';
+
   a.innerHTML=h;
 }
 
-/* ===== DOCX 문서 생성 ===== */
-document.getElementById('btnGen').addEventListener('click',function(){
-  if(typeof window.docx==='undefined'){toast('docx 라이브러리 로딩 실패. Ctrl+Shift+R 새로고침 후 다시 시도하세요.','error');return}
-  try{
-    var D=window.docx;
-    var Document=D.Document,Packer=D.Packer,Paragraph=D.Paragraph,Table=D.Table,TableRow=D.TableRow,TableCell=D.TableCell,TextRun=D.TextRun,WidthType=D.WidthType,BorderStyle=D.BorderStyle;
-    var mon=S.tws.getMonth()+1;
-    var wk=weekOfMonth(S.tws);
-    var fileName='머니올라_'+mon+'월_'+wk+'주차_보고.docx';
-
-    var bdr={top:{style:BorderStyle.SINGLE,size:1,color:'000000'},bottom:{style:BorderStyle.SINGLE,size:1,color:'000000'},left:{style:BorderStyle.SINGLE,size:1,color:'000000'},right:{style:BorderStyle.SINGLE,size:1,color:'000000'}};
-
-    function mkCell(text,bold,shade){
-      var opts={borders:bdr,children:[new Paragraph({children:[new TextRun({text:String(text||''),bold:!!bold,size:20,font:'맑은 고딕'})]})]};
-      if(shade)opts.shading={fill:shade};
-      return new TableCell(opts);
-    }
-
-    function readTbl(id){
-      var t=document.getElementById(id);var result=[];if(!t)return result;
-      var trs=t.querySelectorAll('tr');
-      for(var i=0;i<trs.length;i++){
-        var cells=trs[i].querySelectorAll('td,th');var row=[];
-        for(var j=0;j<cells.length;j++)row.push((cells[j].innerText||'').trim());
-        if(row.length)result.push(row);
-      }
-      return result;
-    }
-
-    function buildDocTable(rows){
-      if(!rows.length)return null;
-      var docRows=[];
-      for(var i=0;i<rows.length;i++){
-        var cells=[];
-        for(var j=0;j<rows[i].length;j++){
-          cells.push(mkCell(rows[i][j],i===0,i===0?'D9E2F3':null));
-        }
-        docRows.push(new TableRow({children:cells}));
-      }
-      return new Table({rows:docRows,width:{size:100,type:WidthType.PERCENTAGE}});
-    }
-
-    var children=[];
-    children.push(new Paragraph({children:[new TextRun({text:'■ 머니올라 '+mon+'월 '+(wk-1)+'주차 실적 및 '+mon+'월 '+wk+'주차 계획',bold:true,size:26,font:'맑은 고딕'})]}));
-    children.push(new Paragraph({text:''}));
-
-    var t1=readTbl('t1');var tbl1=buildDocTable(t1);
-    if(tbl1)children.push(tbl1);
-    children.push(new Paragraph({text:''}));
-
-    children.push(new Paragraph({children:[new TextRun({text:'■ 머니올라 채널 현황',bold:true,size:26,font:'맑은 고딕'})]}));
-    children.push(new Paragraph({children:[new TextRun({text:'구독자 : '+(S.subs||'-')+'명 ('+fmtShort(S.tws)+')',size:22,font:'맑은 고딕'})]}));
-    children.push(new Paragraph({text:''}));
-    var tch=readTbl('t_ch');var tbl2=buildDocTable(tch);
-    if(tbl2)children.push(tbl2);
-    children.push(new Paragraph({text:''}));
-
-    var tct=readTbl('t_ct');var tbl3=buildDocTable(tct);
-    if(tbl3)children.push(tbl3);
-    children.push(new Paragraph({text:''}));
-
-    var ttm=readTbl('t_team');var tbl4=buildDocTable(ttm);
-    if(tbl4)children.push(tbl4);
-
-    var doc=new Document({sections:[{children:children}]});
-    Packer.toBlob(doc).then(function(blob){
-      saveAs(blob,fileName);
-      toast('✅ '+fileName+' 생성 완료!','success');
-    }).catch(function(e){
-      console.error('Packer error:',e);
-      toast('문서 생성 오류: '+e.message,'error');
-    });
-  }catch(e){
-    console.error('docx error:',e);
-    toast('문서 생성 오류: '+e.message,'error');
+/* ===== DOCX 생성 ===== */
+function readTbl(id){
+  var tbl=document.getElementById(id);if(!tbl)return[];
+  var rows=tbl.querySelectorAll('tr');var data=[];
+  for(var i=0;i<rows.length;i++){
+    var cells=rows[i].querySelectorAll('th,td');var row=[];
+    for(var j=0;j<cells.length;j++)row.push((cells[j].innerText||cells[j].textContent||'').trim());
+    data.push(row);
   }
+  return data;
+}
+
+function buildDocTable(rows,headerShade){
+  var D=docx;
+  var tblRows=[];
+  for(var ri=0;ri<rows.length;ri++){
+    var cells=[];
+    for(var ci=0;ci<rows[ri].length;ci++){
+      var isHeader=(ri===0);
+      cells.push(new D.TableCell({
+        children:[new D.Paragraph({children:[new D.TextRun({text:rows[ri][ci],bold:isHeader,size:20,font:'맑은 고딕'})],spacing:{after:40}})],
+        shading:isHeader?{fill:headerShade||'D9E2F3',type:D.ShadingType.CLEAR}:undefined,
+        verticalAlign:D.VerticalAlign.CENTER,
+        margins:{top:40,bottom:40,left:60,right:60}
+      }));
+    }
+    tblRows.push(new D.TableRow({children:cells}));
+  }
+  var colCount=rows[0]?rows[0].length:1;
+  var colWidths=[];for(var c=0;c<colCount;c++)colWidths.push(Math.floor(9000/colCount));
+  return new D.Table({rows:tblRows,width:{size:9000,type:D.WidthType.DXA}});
+}
+
+document.getElementById('btnGen').addEventListener('click',function(){
+  var D=docx;
+  var mon=S.tws.getMonth()+1;
+  var wk=weekOfMonth(S.tws);
+
+  var children=[];
+  children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 머니올라 '+mon+'월 '+(wk-1)+'주차 실적 및 '+mon+'월 '+wk+'주차 계획',bold:true,size:28,font:'맑은 고딕'})],spacing:{after:200}}));
+
+  var t1=readTbl('t1');if(t1.length)children.push(buildDocTable(t1,'D9E2F3'));
+  children.push(new D.Paragraph({text:'',spacing:{after:200}}));
+
+  children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 채널 현황 ('+fmtShort(S.lws)+'~'+fmtShort(S.lwe)+')',bold:true,size:24,font:'맑은 고딕'})],spacing:{before:300,after:200}}));
+  var t2=readTbl('t2');if(t2.length)children.push(buildDocTable(t2,'E2EFDA'));
+  children.push(new D.Paragraph({text:'',spacing:{after:200}}));
+
+  children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 콘텐츠 유형별 ('+fmtShort(S.lws)+'~'+fmtShort(S.lwe)+')',bold:true,size:24,font:'맑은 고딕'})],spacing:{before:300,after:200}}));
+  var t3=readTbl('t3');if(t3.length)children.push(buildDocTable(t3,'FCE4D6'));
+  children.push(new D.Paragraph({text:'',spacing:{after:200}}));
+
+  var subsEl=document.getElementById('pSubs');
+  var subsTxt=subsEl?subsEl.innerText:'';
+  children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 구독자 현황',bold:true,size:24,font:'맑은 고딕'})],spacing:{before:300,after:100}}));
+  children.push(new D.Paragraph({children:[new D.TextRun({text:subsTxt,size:20,font:'맑은 고딕'})],spacing:{after:200}}));
+
+  children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 팀원별 특이사항',bold:true,size:24,font:'맑은 고딕'})],spacing:{before:300,after:200}}));
+  var t4=readTbl('t4');if(t4.length)children.push(buildDocTable(t4,'DDDDDD'));
+
+  var doc=new D.Document({sections:[{properties:{page:{size:{width:12240,height:15840},margin:{top:1000,right:1000,bottom:1000,left:1000}}},children:children}]});
+
+  D.Packer.toBlob(doc).then(function(blob){
+    var yr=String(S.tws.getFullYear()).slice(2);
+    var fname='머니올라_'+yr+'년_'+mon+'월_'+(wk-1)+'주차_보고.docx';
+    saveAs(blob,fname);
+    toast('문서 생성 완료: '+fname,'success');
+  }).catch(function(e){
+    console.error('docx error',e);
+    toast('문서 생성 실패: '+e.message,'error');
+  });
 });
 </script>
 </body>
