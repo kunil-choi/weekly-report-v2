@@ -167,25 +167,22 @@ label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:blo
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx@7.7.0/build/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.umd.min.js"></script>
 <script>
-/* ===== docx 라이브러리 로딩 ===== */
 var _docxLib = null;
 var _docxReady = false;
-(function initDocx(){
+function checkDocx(){
   _docxLib = window.docx || null;
-  if(_docxLib && _docxLib.Document){ _docxReady = true; console.log('docx library ready (jsdelivr)'); return; }
-  console.log('docx not loaded from jsdelivr, trying unpkg...');
+  if(_docxLib && _docxLib.Document){ _docxReady = true; console.log('docx ready'); return; }
   var s = document.createElement('script');
-  s.src = 'https://unpkg.com/docx@7.7.0/build/index.js';
+  s.src = 'https://unpkg.com/docx@7.8.2/build/index.umd.min.js';
   s.onload = function(){
     _docxLib = window.docx || null;
-    if(_docxLib && _docxLib.Document){ _docxReady = true; console.log('docx library ready (unpkg)'); }
-    else { console.error('docx library loaded but Document not found'); }
+    if(_docxLib && _docxLib.Document){ _docxReady = true; console.log('docx ready (unpkg)'); }
   };
-  s.onerror = function(){ console.error('docx unpkg load failed'); };
   document.head.appendChild(s);
-})();
+}
+checkDocx();
 
 var GAS_URL='https://script.google.com/macros/s/AKfycbwmtjpbT8g9dwr2FFIUyAvaRhCH9quBB_pFAiSYfoQXlfWwW8Qs32VXjIzf9itZgmkXgA/exec';
 var S={baseDate:null,lws:null,lwe:null,tws:null,twe:null,lastSch:[],thisSch:[],yt:[],ch:{},ch2:{},ct:{},ct2:{},subs:'',nY:'',nC:''};
@@ -493,6 +490,7 @@ function parseContentOCR(text){
   console.log('동영상 raw:', videoRow);
   console.log('Shorts raw:', shortsRow);
 
+  /* 퍼센트 합계 100% 검증 및 소수점 보정 */
   function fixPct(p1str, p2str){
     var p1 = parseFloat(p1str);
     var p2 = parseFloat(p2str);
@@ -546,7 +544,7 @@ function parseContentOCR(text){
   console.log('=== parseContentOCR 최종 ===');
   console.log({vv:V('ct_vv'),vw:V('ct_vw'),sv:V('ct_sv'),sw:V('ct_sw')});
 }
-<script>
+
 /* Step 3 이미지 */
 document.getElementById('chImg').addEventListener('change',function(e){
   var f=e.target.files[0];if(!f)return;
@@ -560,227 +558,223 @@ document.getElementById('ctImg').addEventListener('change',function(e){
   runOCR(f,'ctOcrStatus',parseContentOCR);
 });
 
-/* ===== Step 1: 시작 버튼 ===== */
+/* ===== Step 1 시작 ===== */
 document.getElementById('btnStart').addEventListener('click',function(){
-  var md=document.getElementById('manDate').value;
-  var base=md?new Date(md+'T00:00:00'):new Date();
+  var mv=document.getElementById('manDate').value;
+  var base=mv?new Date(mv+'T00:00:00'):new Date();
   calcDates(base);
-  var dd=document.getElementById('dateDisp');
-  dd.innerHTML='<span class="date-badge">지난주: '+fmt(S.lws)+' ~ '+fmt(S.lwe)+'</span> <span class="date-badge">이번주: '+fmt(S.tws)+' ~ '+fmt(S.twe)+'</span>';
-  dd.classList.remove('hidden');
-  document.getElementById('todayL').textContent=fmt(new Date());
-  go(2);
-  fetchGAS();
+  var dd=document.getElementById('dateDisp');dd.classList.remove('hidden');
+  dd.innerHTML='<span class="date-badge"><b>지난주:</b> '+fmt(S.lws)+' ~ '+fmt(S.lwe)+'</span><span class="date-badge"><b>이번주:</b> '+fmt(S.tws)+' ~ '+fmt(S.twe)+'</span>';
+  setTimeout(function(){go(2);runStep2()},500);
 });
 
-/* ===== Step 2: GAS fetch ===== */
-function fetchGAS(){
+/* ===== Step 2: GAS 호출 ===== */
+function runStep2(){
   var st=document.getElementById('s2status');
+  document.getElementById('s2log').innerHTML='';
   st.textContent='Google Apps Script 호출 중...';
-  addLog('GAS 호출 시작','');
-  var url=GAS_URL+'?start='+S.lws.toISOString().slice(0,10)+'&end='+S.twe.toISOString().slice(0,10);
-  fetch(url).then(function(r){return r.json()}).then(function(data){
-    console.log('GAS response:',data);
-    addLog('GAS 응답 수신','ok');
-    if(data.schedule){
-      data.schedule.forEach(function(ev){
-        var d=new Date(ev.date);
-        if(inRange(d,S.lws,S.lwe)) S.lastSch.push(ev);
-        if(inRange(d,S.tws,S.twe)) S.thisSch.push(ev);
-      });
-      addLog('일정: 지난주 '+S.lastSch.length+'건, 이번주 '+S.thisSch.length+'건','ok');
-    }
-    if(data.youtube){
-      S.yt=data.youtube.filter(function(v){return inRange(new Date(v.date),S.lws,S.lwe)});
-      addLog('유튜브 영상: '+S.yt.length+'건','ok');
-    }
-    renderS2();
-  }).catch(function(err){
-    console.error('GAS error:',err);
-    addLog('GAS 오류: '+err.message,'err');
-    st.textContent='오류 발생 - 수동으로 진행해주세요';
+  addLog('=== 데이터 수집 시작 ===');
+  fetch(GAS_URL+'?action=all').then(function(r){return r.json()}).then(function(data){
+    addLog('API 응답 수신','ok');
+    if(data.schedule&&data.schedule.success){
+      var rows=data.schedule.rows||[];
+      var yr=S.baseDate.getFullYear();
+      for(var i=0;i<rows.length;i++){rows[i]._date=new Date(yr,rows[i].month-1,rows[i].day);rows[i].uploadItem=clean(rows[i].uploadItem);rows[i].studioRecord=clean(rows[i].studioRecord);rows[i].note=clean(rows[i].note)}
+      S.lastSch=rows.filter(function(r){return inRange(r._date,S.lws,S.lwe)});
+      S.thisSch=rows.filter(function(r){return inRange(r._date,S.tws,S.twe)});
+      addLog('일정: 전체 '+rows.length+'건 / 지난주 '+S.lastSch.length+'건, 이번주 '+S.thisSch.length+'건','ok');
+      toast('일정표 수집 완료','success');
+    }else{addLog('일정표 실패','err')}
+    if(data.youtube&&data.youtube.success){
+      var vids=data.youtube.videos||[];
+      for(var i=0;i<vids.length;i++){vids[i]._date=new Date(vids[i].published);vids[i].title=clean(vids[i].title)}
+      S.yt=vids.filter(function(v){return inRange(v._date,S.lws,S.lwe)});
+      S.yt.sort(function(a,b){return a._date-b._date});
+      addLog('유튜브: 전체 '+vids.length+'건 / 지난주 '+S.yt.length+'건','ok');
+      toast('유튜브 수집 완료','success');
+    }else{addLog('유튜브 실패','err')}
     document.getElementById('s2load').classList.add('hidden');
     document.getElementById('s2result').classList.remove('hidden');
-  });
+    renderS2();
+  }).catch(function(e){addLog('오류: '+e.message,'err');document.getElementById('s2load').classList.add('hidden');document.getElementById('s2result').classList.remove('hidden')});
 }
-
 function renderS2(){
-  document.getElementById('s2load').classList.add('hidden');
-  document.getElementById('s2result').classList.remove('hidden');
-  var ytH='<table class="tbl"><tr><th>날짜</th><th>제목</th><th>유형</th></tr>';
-  S.yt.forEach(function(v){ytH+='<tr><td>'+fmtShort(new Date(v.date))+'</td><td>'+v.title+'</td><td>'+(v.type||'영상')+'</td></tr>'});
-  if(!S.yt.length) ytH+='<tr><td colspan="3" class="tc tm">데이터 없음</td></tr>';
-  ytH+='</table>';document.getElementById('ytR').innerHTML=ytH;
-
-  function schTbl(arr,elId){
-    var h='<table class="tbl"><tr><th>날짜</th><th>일정</th></tr>';
-    arr.forEach(function(ev){h+='<tr><td>'+fmtShort(new Date(ev.date))+'</td><td>'+ev.title+'</td></tr>'});
-    if(!arr.length) h+='<tr><td colspan="2" class="tc tm">일정 없음</td></tr>';
-    h+='</table>';document.getElementById(elId).innerHTML=h;
-  }
-  schTbl(S.lastSch,'schLast');schTbl(S.thisSch,'schThis');
+  var yd=document.getElementById('ytR');
+  if(!S.yt.length){yd.innerHTML='<p class="ts tm">영상 없음</p>'}
+  else{var h='<table class="tbl"><tr><th>날짜</th><th>제목</th><th>조회수</th></tr>';for(var i=0;i<S.yt.length;i++){var v=S.yt[i];h+='<tr><td>'+fmt(v._date)+'</td><td>'+v.title+'</td><td>'+Number(v.views).toLocaleString()+'</td></tr>'}h+='</table>';yd.innerHTML=h}
+  var ld=document.getElementById('schLast');
+  if(!S.lastSch.length){ld.innerHTML='<p class="ts tm">일정 없음</p>'}
+  else{var h='<table class="tbl"><tr><th>날짜</th><th>업로드</th><th>녹화</th><th>특이사항</th></tr>';for(var i=0;i<S.lastSch.length;i++){var r=S.lastSch[i];h+='<tr><td>'+r.dateStr+'</td><td>'+(r.uploadItem||'-')+'</td><td>'+(r.studioRecord||'-')+'</td><td>'+(r.note||'-')+'</td></tr>'}h+='</table>';ld.innerHTML=h}
+  var td=document.getElementById('schThis');
+  if(!S.thisSch.length){td.innerHTML='<p class="ts tm">일정 없음</p>'}
+  else{var h='<table class="tbl"><tr><th>날짜</th><th>업로드</th><th>녹화</th><th>특이사항</th></tr>';for(var i=0;i<S.thisSch.length;i++){var r=S.thisSch[i];h+='<tr><td>'+r.dateStr+'</td><td>'+(r.uploadItem||'-')+'</td><td>'+(r.studioRecord||'-')+'</td><td>'+(r.note||'-')+'</td></tr>'}h+='</table>';td.innerHTML=h}
 }
 
 /* ===== Save functions ===== */
 function saveS3(){
   S.ch={views:V('ch_views'),subs:V('ch_subs'),rev:V('ch_rev'),cpm:V('ch_cpm'),rpm:V('ch_rpm'),ctr:V('ch_ctr'),avg:V('ch_avg')};
   S.ch2={views:V('ch2_views'),subs:V('ch2_subs'),rev:V('ch2_rev'),cpm:V('ch2_cpm'),rpm:V('ch2_rpm'),ctr:V('ch2_ctr'),avg:V('ch2_avg')};
+  toast('채널 현황 저장됨','success');
 }
 function saveS4(){
   S.ct={vv:V('ct_vv'),vw:V('ct_vw'),sv:V('ct_sv'),sw:V('ct_sw')};
   S.ct2={vv:V('ct2_vv'),vw:V('ct2_vw'),sv:V('ct2_sv'),sw:V('ct2_sw')};
+  toast('콘텐츠 유형 저장됨','success');
 }
-function saveS5(){
-  S.subs=V('curSubs');S.nY=V('noteY');S.nC=V('noteC');
-}
+document.getElementById('todayL').textContent=(function(){var d=new Date();return(d.getMonth()+1)+'/'+d.getDate()+' '+DK[d.getDay()]+'요일'})();
+function saveS5(){S.subs=V('curSubs');S.nY=V('noteY');S.nC=V('noteC');toast('저장됨','success')}
 
-/* ===== 미리보기 ===== */
+/* ===== Step 6: 미리보기 ===== */
 function buildPreview(){
-  var h='';
-  var yy=S.lws.getFullYear(),mon=S.lws.getMonth()+1,wk=weekOfMonth(S.lws);
-  h+='<h3 style="margin-bottom:12px">머니올라 '+yy+'년 '+mon+'월 '+wk+'주차 주간보고</h3>';
-  h+='<p class="ts tm">지난주: '+fmt(S.lws)+' ~ '+fmt(S.lwe)+' | 이번주: '+fmt(S.tws)+' ~ '+fmt(S.twe)+'</p>';
-
-  /* 채널현황 테이블 */
-  h+='<h3 class="mt3">1. 채널 현황</h3>';
-  h+='<table class="tbl" id="pvT1"><tr><th></th><th>조회수</th><th>구독자</th><th>예상수익</th><th>CPM</th><th>RPM</th><th>CTR</th><th>평균시청</th></tr>';
-  h+='<tr><td><span class="wl last">지난주</span></td>';
-  h+='<td contenteditable="true">'+S.ch.views+'</td><td contenteditable="true">'+S.ch.subs+'</td><td contenteditable="true">'+S.ch.rev+'</td>';
-  h+='<td contenteditable="true">'+S.ch.cpm+'</td><td contenteditable="true">'+S.ch.rpm+'</td><td contenteditable="true">'+S.ch.ctr+'</td><td contenteditable="true">'+S.ch.avg+'</td></tr>';
-  h+='<tr><td><span class="wl this">지지난주</span></td>';
-  h+='<td contenteditable="true">'+S.ch2.views+'</td><td contenteditable="true">'+S.ch2.subs+'</td><td contenteditable="true">'+S.ch2.rev+'</td>';
-  h+='<td contenteditable="true">'+S.ch2.cpm+'</td><td contenteditable="true">'+S.ch2.rpm+'</td><td contenteditable="true">'+S.ch2.ctr+'</td><td contenteditable="true">'+S.ch2.avg+'</td></tr>';
+  var a=document.getElementById('prevArea');var h='';
+  var lwRange=fmtShort(S.lws)+'~'+fmtShort(S.lwe);
+  var mon=S.tws.getMonth()+1;
+  var wk=weekOfMonth(S.tws);
+  h+='<h3>■ 머니올라 '+mon+'월 '+(wk-1)+'주차 실적 및 '+mon+'월 '+wk+'주차 계획</h3>';
+  h+='<table class="tbl" id="t1"><tr><th>날짜</th><th>업로드 및 예정 아이템</th><th>스튜디오 녹화 일정</th><th>조회수</th></tr>';
+  var lwD=daysIn(S.lws,S.lwe);
+  for(var di=0;di<lwD.length;di++){
+    var d=lwD[di];var dateLabel=fmtShort(d)+'('+DK[d.getDay()]+')';
+    var sch=S.lastSch.filter(function(r){return sameDay(r._date,d)});
+    var upload='-',record='-',views='-';
+    if(sch.length){upload=sch[0].uploadItem||'-';record=sch[0].studioRecord||'-'}
+    var vid=S.yt.filter(function(v){return sameDay(v._date,d)});
+    if(vid.length)views=Number(vid[0].views).toLocaleString();
+    h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+upload+'</td><td contenteditable="true">'+record+'</td><td contenteditable="true">'+views+'</td></tr>';
+  }
+  var twD=daysIn(S.tws,S.twe);
+  for(var di=0;di<twD.length;di++){
+    var d=twD[di];var dateLabel=fmtShort(d)+'('+DK[d.getDay()]+')';
+    var sch=S.thisSch.filter(function(r){return sameDay(r._date,d)});
+    var upload='-',record='-';
+    if(sch.length){upload=sch[0].uploadItem||'-';record=sch[0].studioRecord||'-'}
+    h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+upload+'</td><td contenteditable="true">'+record+'</td><td>-</td></tr>';
+  }
   h+='</table>';
-
-  /* 콘텐츠유형 테이블 */
-  h+='<h3 class="mt3">2. 콘텐츠 유형별</h3>';
-  h+='<table class="tbl" id="pvT2"><tr><th></th><th>조회수</th><th>시청시간</th></tr>';
-  h+='<tr><td><b>동영상</b> <span class="wl last">지난주</span></td><td contenteditable="true">'+S.ct.vv+'</td><td contenteditable="true">'+S.ct.vw+'</td></tr>';
-  h+='<tr><td><b>Shorts</b> <span class="wl last">지난주</span></td><td contenteditable="true">'+S.ct.sv+'</td><td contenteditable="true">'+S.ct.sw+'</td></tr>';
-  h+='<tr><td><b>동영상</b> <span class="wl this">지지난주</span></td><td contenteditable="true">'+S.ct2.vv+'</td><td contenteditable="true">'+S.ct2.vw+'</td></tr>';
-  h+='<tr><td><b>Shorts</b> <span class="wl this">지지난주</span></td><td contenteditable="true">'+S.ct2.sv+'</td><td contenteditable="true">'+S.ct2.sw+'</td></tr>';
+  h+='<h3>■ 채널 현황 ('+lwRange+')</h3>';
+  h+='<table class="tbl" id="t2"><tr><th></th><th>조회수</th><th>구독자</th><th>예상 수익</th><th>재생 기반 CPM</th><th>RPM</th><th>노출 클릭률</th><th>평균 시청 지속 시간</th></tr>';
+  h+='<tr><td><b>지난주</b></td><td contenteditable="true">'+(S.ch.views||'')+'</td><td contenteditable="true">'+(S.ch.subs||'')+'</td><td contenteditable="true">'+(S.ch.rev||'')+'</td><td contenteditable="true">'+(S.ch.cpm||'')+'</td><td contenteditable="true">'+(S.ch.rpm||'')+'</td><td contenteditable="true">'+(S.ch.ctr||'')+'</td><td contenteditable="true">'+(S.ch.avg||'')+'</td></tr>';
+  h+='<tr><td><b>지지난주</b></td><td contenteditable="true">'+(S.ch2.views||'')+'</td><td contenteditable="true">'+(S.ch2.subs||'')+'</td><td contenteditable="true">'+(S.ch2.rev||'')+'</td><td contenteditable="true">'+(S.ch2.cpm||'')+'</td><td contenteditable="true">'+(S.ch2.rpm||'')+'</td><td contenteditable="true">'+(S.ch2.ctr||'')+'</td><td contenteditable="true">'+(S.ch2.avg||'')+'</td></tr>';
   h+='</table>';
-
-  /* 유튜브 영상 */
-  h+='<h3 class="mt3">3. 지난주 업로드 영상</h3>';
-  h+='<table class="tbl" id="pvT3"><tr><th>날짜</th><th>제목</th><th>유형</th></tr>';
-  S.yt.forEach(function(v){h+='<tr><td contenteditable="true">'+fmtShort(new Date(v.date))+'</td><td contenteditable="true">'+v.title+'</td><td contenteditable="true">'+(v.type||'영상')+'</td></tr>'});
-  if(!S.yt.length) h+='<tr><td colspan="3" contenteditable="true" class="tc">-</td></tr>';
+  h+='<h3>■ 콘텐츠 유형별 ('+lwRange+')</h3>';
+  h+='<table class="tbl" id="t3"><tr><th></th><th>조회수</th><th>시청 시간</th></tr>';
+  h+='<tr><td><b>지난주 동영상</b></td><td contenteditable="true">'+(S.ct.vv||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+'</td></tr>';
+  h+='<tr><td><b>지난주 Shorts</b></td><td contenteditable="true">'+(S.ct.sv||'')+'</td><td contenteditable="true">'+(S.ct.sw||'')+'</td></tr>';
+  h+='<tr><td><b>지지난주 동영상</b></td><td contenteditable="true">'+(S.ct2.vv||'')+'</td><td contenteditable="true">'+(S.ct2.vw||'')+'</td></tr>';
+  h+='<tr><td><b>지지난주 Shorts</b></td><td contenteditable="true">'+(S.ct2.sv||'')+'</td><td contenteditable="true">'+(S.ct2.sw||'')+'</td></tr>';
   h+='</table>';
-
-  /* 일정 */
-  h+='<h3 class="mt3">4. 일정</h3>';
-  h+='<table class="tbl" id="pvT4"><tr><th>구분</th><th>날짜</th><th>일정</th></tr>';
-  S.lastSch.forEach(function(ev){h+='<tr><td><span class="wl last">지난주</span></td><td contenteditable="true">'+fmtShort(new Date(ev.date))+'</td><td contenteditable="true">'+ev.title+'</td></tr>'});
-  S.thisSch.forEach(function(ev){h+='<tr><td><span class="wl this">이번주</span></td><td contenteditable="true">'+fmtShort(new Date(ev.date))+'</td><td contenteditable="true">'+ev.title+'</td></tr>'});
-  if(!S.lastSch.length && !S.thisSch.length) h+='<tr><td colspan="3" contenteditable="true" class="tc">일정 없음</td></tr>';
+  h+='<h3>■ 구독자 현황</h3>';
+  h+='<p id="pSubs">현재 구독자 수: <b>'+(S.subs||'')+'</b></p>';
+  h+='<h3>■ 팀원별 특이사항</h3>';
+  h+='<table class="tbl" id="t4"><tr><th>팀원</th><th>내용</th></tr>';
+  h+='<tr><td>양영은</td><td contenteditable="true">'+(S.nY||'-')+'</td></tr>';
+  h+='<tr><td>최건일</td><td contenteditable="true">'+(S.nC||'-')+'</td></tr>';
   h+='</table>';
-
-  /* 구독자 / 메모 */
-  h+='<h3 class="mt3">5. 구독자 & 메모</h3>';
-  h+='<table class="tbl" id="pvT5"><tr><th>항목</th><th>내용</th></tr>';
-  h+='<tr><td>현재 구독자</td><td contenteditable="true">'+S.subs+'</td></tr>';
-  h+='<tr><td>양영은 메모</td><td contenteditable="true">'+S.nY+'</td></tr>';
-  h+='<tr><td>최건일 메모</td><td contenteditable="true">'+S.nC+'</td></tr>';
-  h+='</table>';
-
-  document.getElementById('prevArea').innerHTML=h;
+  a.innerHTML=h;
 }
 
 /* ===== DOCX 생성 ===== */
-document.getElementById('btnGen').addEventListener('click',function(){
-  var D = window.docx;
+function readTbl(id){
+  var tbl=document.getElementById(id);if(!tbl)return[];
+  var rows=tbl.querySelectorAll('tr');var data=[];
+  for(var i=0;i<rows.length;i++){
+    var cells=rows[i].querySelectorAll('th,td');var row=[];
+    for(var j=0;j<cells.length;j++)row.push((cells[j].innerText||cells[j].textContent||'').trim());
+    data.push(row);
+  }
+  return data;
+}
+
+function buildDocTable(D,rows,headerShade){
+  var tblRows=[];
+  for(var ri=0;ri<rows.length;ri++){
+    var cells=[];
+    for(var ci=0;ci<rows[ri].length;ci++){
+      var isH=(ri===0);
+      var cellOpts={
+        children:[new D.Paragraph({
+          children:[new D.TextRun({text:rows[ri][ci]||'',bold:isH,size:20,font:'Malgun Gothic'})],
+          spacing:{after:40}
+        })],
+        verticalAlign:D.VerticalAlign.CENTER,
+        margins:{top:40,bottom:40,left:60,right:60}
+      };
+      if(isH&&headerShade) cellOpts.shading={fill:headerShade,type:D.ShadingType.CLEAR};
+      cells.push(new D.TableCell(cellOpts));
+    }
+    tblRows.push(new D.TableRow({children:cells}));
+  }
+  return new D.Table({rows:tblRows,width:{size:9000,type:D.WidthType.DXA}});
+}
+
+function doGenerateDocx(){
+  if(!_docxReady){
+    _docxLib = window.docx || null;
+    if(_docxLib && _docxLib.Document) _docxReady = true;
+  }
+  var D = _docxLib;
   if(!D || !D.Document){
-    toast('docx 라이브러리를 로딩하고 있습니다. 잠시 후 다시 시도해주세요.','info');
-    /* 재시도 로드 */
-    var s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/docx@7.7.0/build/index.js';
-    s.onload=function(){
-      if(window.docx && window.docx.Document){
-        _docxLib=window.docx;_docxReady=true;
-        toast('라이브러리 로딩 완료! 버튼을 다시 눌러주세요.','success');
+    toast('docx 라이브러리 로딩 중... 3초 후 자동 재시도합니다.','info');
+    var s = document.createElement('script');
+    s.src = 'https://unpkg.com/docx@7.8.2/build/index.umd.min.js';
+    s.onload = function(){
+      _docxLib = window.docx || null;
+      if(_docxLib && _docxLib.Document){
+        _docxReady = true;
+        doGenerateDocx();
+      } else {
+        toast('docx 라이브러리 로딩 실패. Ctrl+Shift+R로 새로고침 해주세요.','error');
       }
+    };
+    s.onerror = function(){
+      toast('docx CDN 연결 실패. 인터넷 연결을 확인해주세요.','error');
     };
     document.head.appendChild(s);
     return;
   }
-  try{ doGenerateDocx(D); }
-  catch(err){ console.error('DOCX gen error:',err); toast('문서 생성 오류: '+err.message,'error'); }
-});
 
-function doGenerateDocx(D){
-  var yy=S.lws.getFullYear(),mon=S.lws.getMonth()+1,wk=weekOfMonth(S.lws);
-  var title='머니올라 '+yy+'년 '+mon+'월 '+wk+'주차 주간보고';
-  var FONT='Malgun Gothic';
+  try{
+    var mon=S.tws.getMonth()+1;
+    var wk=weekOfMonth(S.tws);
+    var children=[];
+    children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 머니올라 '+mon+'월 '+(wk-1)+'주차 실적 및 '+mon+'월 '+wk+'주차 계획',bold:true,size:28,font:'Malgun Gothic'})],spacing:{after:200}}));
+    var t1=readTbl('t1');if(t1.length)children.push(buildDocTable(D,t1,'D9E2F3'));
+    children.push(new D.Paragraph({text:'',spacing:{after:200}}));
+    children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 채널 현황 ('+fmtShort(S.lws)+'~'+fmtShort(S.lwe)+')',bold:true,size:24,font:'Malgun Gothic'})],spacing:{before:300,after:200}}));
+    var t2=readTbl('t2');if(t2.length)children.push(buildDocTable(D,t2,'E2EFDA'));
+    children.push(new D.Paragraph({text:'',spacing:{after:200}}));
+    children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 콘텐츠 유형별 ('+fmtShort(S.lws)+'~'+fmtShort(S.lwe)+')',bold:true,size:24,font:'Malgun Gothic'})],spacing:{before:300,after:200}}));
+    var t3=readTbl('t3');if(t3.length)children.push(buildDocTable(D,t3,'FCE4D6'));
+    children.push(new D.Paragraph({text:'',spacing:{after:200}}));
+    var subsEl=document.getElementById('pSubs');
+    children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 구독자 현황',bold:true,size:24,font:'Malgun Gothic'})],spacing:{before:300,after:100}}));
+    children.push(new D.Paragraph({children:[new D.TextRun({text:subsEl?subsEl.innerText:'',size:20,font:'Malgun Gothic'})],spacing:{after:200}}));
+    children.push(new D.Paragraph({children:[new D.TextRun({text:'■ 팀원별 특이사항',bold:true,size:24,font:'Malgun Gothic'})],spacing:{before:300,after:200}}));
+    var t4=readTbl('t4');if(t4.length)children.push(buildDocTable(D,t4,'DDDDDD'));
 
-  function P(text,opts){
-    opts=opts||{};
-    var runOpts={text:text||'',font:FONT,size:opts.size||20};
-    if(opts.bold) runOpts.bold=true;
-    if(opts.color) runOpts.color=opts.color;
-    var pOpts={children:[new D.TextRun(runOpts)]};
-    if(opts.heading) pOpts.heading=opts.heading;
-    if(opts.spacing) pOpts.spacing=opts.spacing;
-    return new D.Paragraph(pOpts);
-  }
-
-  function buildDocTable(tblEl){
-    if(!tblEl) return null;
-    var rows=tblEl.querySelectorAll('tr');
-    var dRows=[];
-    for(var ri=0;ri<rows.length;ri++){
-      var cells=rows[ri].querySelectorAll('th,td');
-      var dCells=[];
-      for(var ci=0;ci<cells.length;ci++){
-        var txt=(cells[ci].innerText||cells[ci].textContent||'').trim();
-        var isH=cells[ci].tagName==='TH';
-        dCells.push(new D.TableCell({
-          children:[P(txt,{bold:isH,size:18})],
-          shading:isH?{fill:'D9E2F3',type:D.ShadingType.CLEAR,color:'auto'}:undefined,
-          verticalAlign:D.VerticalAlign.CENTER
-        }));
-      }
-      dRows.push(new D.TableRow({children:dCells}));
-    }
-    return new D.Table({rows:dRows,width:{size:100,type:D.WidthType.PERCENTAGE}});
-  }
-
-  var children=[];
-  children.push(P(title,{bold:true,size:28,heading:D.HeadingLevel.HEADING_1}));
-  children.push(P('지난주: '+fmt(S.lws)+' ~ '+fmt(S.lwe)+' | 이번주: '+fmt(S.tws)+' ~ '+fmt(S.twe),{size:18,color:'666666',spacing:{after:300}}));
-
-  var ids=['pvT1','pvT2','pvT3','pvT4','pvT5'];
-  var titles=['1. 채널 현황','2. 콘텐츠 유형별','3. 지난주 업로드 영상','4. 일정','5. 구독자 & 메모'];
-  for(var ti=0;ti<ids.length;ti++){
-    children.push(P(titles[ti],{bold:true,size:22,heading:D.HeadingLevel.HEADING_2,spacing:{before:300}}));
-    var tblEl=document.getElementById(ids[ti]);
-    var docTbl=buildDocTable(tblEl);
-    if(docTbl) children.push(docTbl);
-    children.push(P('',{spacing:{after:200}}));
-  }
-
-  var doc=new D.Document({
-    sections:[{properties:{},children:children}]
-  });
-
-  D.Packer.toBlob(doc).then(function(blob){
-    var fname='머니올라_'+yy+'년_'+mon+'월_'+wk+'주차_주간보고.docx';
-    /* saveAs 또는 수동 다운로드 */
-    if(typeof saveAs === 'function'){
-      saveAs(blob,fname);
-    } else {
-      var url=URL.createObjectURL(blob);
-      var a=document.createElement('a');
-      a.href=url;a.download=fname;
-      document.body.appendChild(a);a.click();
-      setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
-    }
-    toast('✅ 문서 생성 완료! 다운로드를 확인하세요.','success');
-  }).catch(function(err){
-    console.error('Packer error:',err);
-    toast('문서 패킹 오류: '+err.message,'error');
-  });
+    var doc=new D.Document({sections:[{properties:{page:{size:{width:12240,height:15840},margin:{top:1000,right:1000,bottom:1000,left:1000}}},children:children}]});
+    D.Packer.toBlob(doc).then(function(blob){
+      var yr=String(S.tws.getFullYear()).slice(2);
+      var fname='머니올라_'+yr+'년_'+mon+'월_'+(wk-1)+'주차_보고.docx';
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+      toast('문서 생성 완료: '+fname,'success');
+    }).catch(function(e){console.error('Packer error:',e);toast('문서 생성 실패: '+e.message,'error');});
+  }catch(e){console.error('DOCX error:',e);toast('문서 생성 오류: '+e.message,'error');}
 }
+
+document.getElementById('btnGen').addEventListener('click',function(){
+  if(!_docxReady||!_docxLib){
+    _docxLib=window.docx||null;
+    if(_docxLib&&_docxLib.Document){_docxReady=true;}
+  }
+  doGenerateDocx();
+});
 </script>
 </body>
 </html>
