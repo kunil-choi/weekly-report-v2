@@ -172,96 +172,162 @@ function formatManPct(numStr, pctStr){
   return manStr + '(' + p.toFixed(1).replace(/\.0$/,'') + '%)';
 }
 
-/* ===== 콘텐츠 유형 OCR 파싱 ===== */
+/* ===== 콘텐츠 유형 OCR 파싱 (v2) ===== */
 function parseContentOCR(text){
-  console.log('=== parseContentOCR 시작 ===');
+  console.log('=== parseContentOCR v2 시작 ===');
   showOcrDebug('ctOcrStatus', text);
   var lines = text.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>0;});
   for(var i=0;i<lines.length;i++) console.log('CL'+i+':',lines[i]);
-  function getAllNumbers(line){
-    var result=[];var timeless=line.replace(/\d+:\d+/g,function(m){return ' '.repeat(m.length);});
-    var re=/(\d[\d,]*\.?\d*)/g;var m;
-    while((m=re.exec(timeless))!==null){result.push({val:m[1],pos:m.index});}
-    return result;
+
+  function cleanLine(line){
+    /* 줄 앞부분의 라벨/아이콘 잔해 제거: 동영상/Shorts 키워드 앞의 노이즈 */
+    line = line.replace(/^[^\d가-힣A-Za-z]*/, '');
+    /* "동영상" 또는 "Shorts" 키워드와 그 앞의 잡 문자 제거 */
+    line = line.replace(/^.*?(동영상|[Ss]horts|쇼츠)/, '$1');
+    return line;
   }
+
   function parseDataRow(line){
-    var allNums=getAllNumbers(line);
-    var pctPositions=[];var pctRe=/%/g;var pm;
-    while((pm=pctRe.exec(line))!==null){pctPositions.push(pm.index);}
-    var dataNums=[],pctNums=[];
-    for(var ni=0;ni<allNums.length;ni++){
-      var numEnd=allNums[ni].pos+allNums[ni].val.length;var isPct=false;
-      for(var pi=0;pi<pctPositions.length;pi++){
-        var gap=line.substring(numEnd,pctPositions[pi]);
-        if(gap.length<=3&&/^\s*$/.test(gap)){isPct=true;break;}
+    /* 라벨(동영상/Shorts) 제거하고 숫자 부분만 남김 */
+    var numPart = line.replace(/^.*?(동영상|[Ss]horts|쇼츠)\s*/, '');
+
+    /* 모든 숫자 추출 (시간 형태 제외) */
+    var timeless = numPart.replace(/\d+:\d+/g, function(m){return ' '.repeat(m.length);});
+    var allNums = [];
+    var re = /(\d[\d,]*\.?\d*)/g;
+    var m;
+    while((m = re.exec(timeless)) !== null){
+      allNums.push({val: m[1], pos: m.index});
+    }
+
+    /* % 위치 추출 */
+    var pctPositions = [];
+    var pctRe = /%/g;
+    var pm;
+    while((pm = pctRe.exec(numPart)) !== null){
+      pctPositions.push(pm.index);
+    }
+
+    /* 숫자를 일반 숫자와 % 숫자로 분류 */
+    var dataNums = [], pctNums = [];
+    for(var ni=0; ni<allNums.length; ni++){
+      var numEnd = allNums[ni].pos + allNums[ni].val.length;
+      var isPct = false;
+      for(var pi=0; pi<pctPositions.length; pi++){
+        var gap = numPart.substring(numEnd, pctPositions[pi]);
+        if(gap.length <= 3 && /^\s*$/.test(gap)){isPct=true; break;}
       }
-      if(isPct){pctNums.push(allNums[ni].val);}else{dataNums.push(allNums[ni].val);}
+      if(isPct){
+        pctNums.push(allNums[ni].val);
+      } else {
+        /* 한 자리 숫자는 무시 (OCR 잡 노이즈) */
+        var nv = parseFloat(allNums[ni].val.replace(/,/g,''));
+        if(allNums[ni].val.replace(/,/g,'').length >= 2 || nv >= 10){
+          dataNums.push(allNums[ni].val);
+        }
+      }
     }
-    return{viewNum:dataNums[0]||'',viewPct:pctNums[0]||'',watchNum:dataNums[1]||'',watchPct:pctNums[1]||''};
+
+    console.log('  dataNums:', JSON.stringify(dataNums), 'pctNums:', JSON.stringify(pctNums));
+
+    return{
+      viewNum:  dataNums[0] || '',
+      viewPct:  pctNums[0] || '',
+      watchNum: dataNums[1] || '',
+      watchPct: pctNums[1] || ''
+    };
   }
-  var videoRow=null,shortsRow=null;
+
+  var videoRow=null, shortsRow=null;
   for(var i=0;i<lines.length;i++){
-    var line=lines[i];
-    if(/합계/.test(line))continue;
-    var isVideo=/동영상/.test(line);var isShorts=/[Ss]horts|쇼츠/.test(line);
-    if(!isVideo&&!isShorts)continue;
-    var data=parseDataRow(line);
-    if((!data.viewNum||!data.viewPct||!data.watchNum||!data.watchPct)&&i+1<lines.length&&!/합계|동영상|[Ss]horts|쇼츠/.test(lines[i+1])){
-      data=parseDataRow(line+'  '+lines[i+1]);
+    var line = lines[i];
+    if(/합계/.test(line)) continue;
+    var isVideo = /동영상/.test(line);
+    var isShorts = /[Ss]horts|쇼츠/.test(line);
+    if(!isVideo && !isShorts) continue;
+
+    var cleaned = cleanLine(line);
+    var data = parseDataRow(cleaned);
+
+    /* 데이터가 부족하면 다음 줄도 합쳐서 재시도 */
+    if((!data.viewNum || !data.viewPct || !data.watchNum || !data.watchPct)
+       && i+1 < lines.length
+       && !/합계|동영상|[Ss]horts|쇼츠/.test(lines[i+1])){
+      data = parseDataRow(cleaned + '  ' + lines[i+1]);
     }
-    if(isVideo)videoRow=data;if(isShorts)shortsRow=data;
+
+    if(isVideo)  videoRow = data;
+    if(isShorts) shortsRow = data;
   }
-  function fixPct(p1str,p2str){
-    var p1=parseFloat(p1str);var p2=parseFloat(p2str);
-    if(isNaN(p1)&&isNaN(p2))return[p1str,p2str];
-    if(isNaN(p1)&&!isNaN(p2))return[String(Math.round((100-p2)*10)/10),String(p2)];
-    if(!isNaN(p1)&&isNaN(p2))return[String(p1),String(Math.round((100-p1)*10)/10)];
+
+  console.log('videoRow:', JSON.stringify(videoRow));
+  console.log('shortsRow:', JSON.stringify(shortsRow));
+
+  /* % 보정 */
+  function fixPct(p1str, p2str){
+    var p1=parseFloat(p1str); var p2=parseFloat(p2str);
+    if(isNaN(p1)&&isNaN(p2)) return [p1str,p2str];
+    if(isNaN(p1)&&!isNaN(p2)) return [String(Math.round((100-p2)*10)/10),String(p2)];
+    if(!isNaN(p1)&&isNaN(p2)) return [String(p1),String(Math.round((100-p1)*10)/10)];
     var sum=p1+p2;
-    if(sum>=99&&sum<=101)return[String(p1),String(p2)];
-    if(sum>=900&&sum<=1100)return[String(Math.round(p1/10*10)/10),String(Math.round(p2/10*10)/10)];
-    if(p1>100){var f1=p1/10;if(Math.abs(f1+p2-100)<3)return[String(Math.round(f1*10)/10),String(p2)];}
-    if(p2>100){var f2=p2/10;if(Math.abs(p1+f2-100)<3)return[String(p1),String(Math.round(f2*10)/10)];}
-    if(p1>100)p1=p1/10;if(p2>100)p2=p2/10;
-    return[String(Math.round(p1*10)/10),String(Math.round(p2*10)/10)];
+    /* 정상 범위 */
+    if(sum>=99 && sum<=101) return [String(p1),String(p2)];
+    /* 10배 오류 (예: 673 + 327 = 1000 → 67.3 + 32.7) */
+    if(sum>=900 && sum<=1100) return [String(Math.round(p1/10*10)/10),String(Math.round(p2/10*10)/10)];
+    /* 한쪽만 10배 (예: 67.3 + 327 → 67.3 + 32.7) */
+    if(p1<100 && p2>=100){
+      var f2=p2/10;
+      if(Math.abs(p1+f2-100)<3) return [String(p1),String(Math.round(f2*10)/10)];
+    }
+    if(p2<100 && p1>=100){
+      var f1=p1/10;
+      if(Math.abs(f1+p2-100)<3) return [String(Math.round(f1*10)/10),String(p2)];
+    }
+    /* 소수점 누락 (예: 673 → 67.3) */
+    if(p1>100) p1=p1/10;
+    if(p2>100) p2=p2/10;
+    return [String(Math.round(p1*10)/10),String(Math.round(p2*10)/10)];
   }
-  if(videoRow&&shortsRow){
-    var fv=fixPct(videoRow.viewPct,shortsRow.viewPct);videoRow.viewPct=fv[0];shortsRow.viewPct=fv[1];
-    var fw=fixPct(videoRow.watchPct,shortsRow.watchPct);videoRow.watchPct=fw[0];shortsRow.watchPct=fw[1];
-  }else if(shortsRow&&!videoRow){
-    var sp=parseFloat(shortsRow.viewPct);if(!isNaN(sp)&&sp>100)shortsRow.viewPct=String(Math.round(sp/10*10)/10);
-    var swp=parseFloat(shortsRow.watchPct);if(!isNaN(swp)&&swp>100)shortsRow.watchPct=String(Math.round(swp/10*10)/10);
+
+  if(videoRow && shortsRow){
+    var fv = fixPct(videoRow.viewPct, shortsRow.viewPct);
+    videoRow.viewPct = fv[0];
+    shortsRow.viewPct = fv[1];
+    var fw = fixPct(videoRow.watchPct, shortsRow.watchPct);
+    videoRow.watchPct = fw[0];
+    shortsRow.watchPct = fw[1];
+  } else if(shortsRow && !videoRow){
+    var sp=parseFloat(shortsRow.viewPct);
+    if(!isNaN(sp)&&sp>100) shortsRow.viewPct=String(Math.round(sp/10*10)/10);
+    var swp=parseFloat(shortsRow.watchPct);
+    if(!isNaN(swp)&&swp>100) shortsRow.watchPct=String(Math.round(swp/10*10)/10);
   }
+
+  console.log('보정 후 videoRow:', JSON.stringify(videoRow));
+  console.log('보정 후 shortsRow:', JSON.stringify(shortsRow));
+
+  /* 열 순서 감지 */
   var colOrder='views_first';
   for(var i=0;i<lines.length;i++){
-    if(/조회\s*수/.test(lines[i])&&/시청/.test(lines[i])){
-      var vp=lines[i].search(/조회\s*수/);var wp=lines[i].search(/시청/);
-      if(wp>=0&&vp>=0&&wp<vp)colOrder='watch_first';break;
+    if(/조회\s*수/.test(lines[i]) && /시청/.test(lines[i])){
+      var vp=lines[i].search(/조회\s*수/);
+      var wp=lines[i].search(/시청/);
+      if(wp>=0 && vp>=0 && wp<vp) colOrder='watch_first';
+      break;
     }
   }
+
+  /* 결과 적용 */
   if(videoRow){
-    var vv=formatManPct(videoRow.viewNum,videoRow.viewPct);var vw=formatManPct(videoRow.watchNum,videoRow.watchPct);
-    if(colOrder==='views_first'){setV('ct_vv',vv);setV('ct_vw',vw);}else{setV('ct_vw',vv);setV('ct_vv',vw);}
+    var vv=formatManPct(videoRow.viewNum, videoRow.viewPct);
+    var vw=formatManPct(videoRow.watchNum, videoRow.watchPct);
+    if(colOrder==='views_first'){setV('ct_vv',vv);setV('ct_vw',vw);}
+    else{setV('ct_vw',vv);setV('ct_vv',vw);}
   }
   if(shortsRow){
-    var sv=formatManPct(shortsRow.viewNum,shortsRow.viewPct);var sw=formatManPct(shortsRow.watchNum,shortsRow.watchPct);
-    if(colOrder==='views_first'){setV('ct_sv',sv);setV('ct_sw',sw);}else{setV('ct_sw',sv);setV('ct_sv',sw);}
+    var sv=formatManPct(shortsRow.viewNum, shortsRow.viewPct);
+    var sw=formatManPct(shortsRow.watchNum, shortsRow.watchPct);
+    if(colOrder==='views_first'){setV('ct_sv',sv);setV('ct_sw',sw);}
+    else{setV('ct_sw',sv);setV('ct_sv',sw);}
   }
 }
-
-/* ===== [수정5] 이미지 업로드 핸들러 ===== */
-document.getElementById('chImg').addEventListener('change',function(e){
-  var f=e.target.files[0];if(!f)return;
-  var img=document.getElementById('chImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden');
-  ['ch_views','ch_subs','ch_rev','ch_cpm','ch_rpm','ch_ctr','ch_avg'].forEach(function(id){setV(id,'');});
-  document.getElementById('chOcrStatus').textContent='';
-  document.getElementById('chOcrStatus').style.color='#fbbf24';
-  runOCR(f,'chOcrStatus',parseChannelOCR);
-});
-document.getElementById('ctImg').addEventListener('change',function(e){
-  var f=e.target.files[0];if(!f)return;
-  var img=document.getElementById('ctImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden');
-  ['ct_vv','ct_vw','ct_sv','ct_sw'].forEach(function(id){setV(id,'');});
-  document.getElementById('ctOcrStatus').textContent='';
-  document.getElementById('ctOcrStatus').style.color='#fbbf24';
-  runOCR(f,'ctOcrStatus',parseContentOCR);
-});
