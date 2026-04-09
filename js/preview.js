@@ -31,7 +31,7 @@ function buildPreview(){
   h+='<h3>■ '+title+'</h3>';
 
   /* ===== 지난주 실적 테이블 ===== */
-  /* [수정1] 지난주: 업로드는 유튜브 영상 섹션에 이미 표시되므로 녹화+특이사항+조회수만 표시 */
+  /* [수정1] 지난주: 녹화+특이사항+조회수만 표시 (업로드 제외) */
   h+='<h4 style="color:#818cf8;margin:14px 0 6px"><span class="wl last">지난주</span> '+lwRange+'</h4>';
   h+='<table class="tbl" id="t1a"><tr><th>날짜</th><th>스튜디오 녹화 일정</th><th>특이사항</th><th>조회수</th></tr>';
   var lwD=daysIn(S.lws,S.lwe);
@@ -42,13 +42,12 @@ function buildPreview(){
     if(sch.length){
       var records=[], notes=[];
       for(var si=0;si<sch.length;si++){
-        if(sch[si].studioRecord) records.push(sch[si].studioRecord);
+        if(sch[si].studioRecordClean) records.push(sch[si].studioRecordClean);
         if(sch[si].note) notes.push(sch[si].note);
       }
       record=records.length?records.join(', '):'-';
       noteVal=notes.length?notes.join(', '):'-';
     }
-    /* docx에서 추출한 _prevSchedule 보충 (GAS 데이터가 없을 때) */
     if(record==='-' && S._prevSchedule && S._prevSchedule.length){
       for(var pi=0;pi<S._prevSchedule.length;pi++){
         var ps=S._prevSchedule[pi];
@@ -65,7 +64,6 @@ function buildPreview(){
   h+='</table>';
 
   /* ===== 이번주 계획 테이블 ===== */
-  /* [수정2] 이번주: 같은날 복수 일정 → 콤마 구분 */
   h+='<h4 style="color:#34d399;margin:14px 0 6px"><span class="wl this">이번주</span> '+twRange+'</h4>';
   h+='<table class="tbl" id="t1b"><tr><th>날짜</th><th>업로드 및 예정 아이템</th><th>스튜디오 녹화 일정</th><th>특이사항</th></tr>';
   var twD=daysIn(S.tws,S.twe);
@@ -77,10 +75,8 @@ function buildPreview(){
       var uploads=[],records=[],notes=[];
       for(var si=0;si<sch.length;si++){
         if(sch[si].uploadItem) uploads.push(sch[si].uploadItem);
-        if(sch[si].studioRecord){
-          var recEntry = sch[si].recordTime ? (sch[si].recordTime+' '+sch[si].studioRecord) : sch[si].studioRecord;
-          records.push(recEntry);
-        }
+        /* 녹화: studioRecordClean 사용 (이미 "시간 출연자, 시간 출연자" 형태) */
+        if(sch[si].studioRecordClean) records.push(sch[si].studioRecordClean);
         if(sch[si].note) notes.push(sch[si].note);
       }
       upload=uploads.length?uploads.join(', '):'-';
