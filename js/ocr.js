@@ -19,268 +19,150 @@ function runOCR(imageFile,statusElId,callback){
   });
 }
 
-/* ===== 채널 현황 OCR 파싱 (전면 재작성 v3) ===== */
+/* ===== 채널 현황 OCR 파싱 v4 ===== */
 /*
- * 핵심 전략 변경:
- * OCR은 테이블을 정확한 행/열로 읽지 못하는 경우가 많다.
- * 따라서 "헤더 순서 → 값 순서 매칭"에 의존하지 않고,
- * 전체 텍스트에서 키워드와 가장 가까운 값을 찾아 매칭한다.
+ * v4 전략: OCR 원문 디버그 + 견고한 파싱
  *
- * 추가로, 값의 고유 패턴을 이용한 검증을 한다:
- * - 평균 시청 지속 시간: HH:MM 또는 M:SS 형태 (예: 9:18)
- * - 노출 클릭률: N.N% 형태 (예: 5.7%)
- * - 예상 수익: 가장 큰 숫자 (백만 단위)
- * - 조회수: 두 번째로 큰 숫자 (백만~십만 단위)
- * - CPM, RPM: 천~만 단위 (₩ 접두어 가능)
- * - 구독자: 천~만 단위 (부호 가능)
+ * OCR이 테이블을 읽는 3가지 패턴:
+ * A) 헤더 한 줄 + 값 한 줄 (이상적)
+ * B) 헤더 여러 줄 + 값 한 줄
+ * C) 헤더와 값이 교대로 (열별로 읽음)
+ *
+ * 모든 경우를 처리하는 접근:
+ * 1. 전체 텍스트에서 7개 값을 패턴으로 먼저 추출
+ * 2. 키워드 위치와의 관계로 매칭
  */
 function parseChannelOCR(text){
-  console.log('=== parseChannelOCR v3 시작 ===');
+  console.log('=== parseChannelOCR v4 시작 ===');
+
+  /* OCR 원문을 디버그 영역에 표시 */
+  showOcrDebug('chOcrStatus', text);
+
   var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
-  var fullText = lines.join(' ');
-  console.log('OCR lines:', JSON.stringify(lines));
+  var fullText = text.replace(/\n/g, ' ');
 
-  /* ===== 1단계: 전체 텍스트를 하나로 합쳐서 헤더+값을 모두 포함하는 단일 문자열 만들기 ===== */
+  /* ===== 1단계: 전체 텍스트에서 7종류 값 패턴 추출 ===== */
 
-  /* ===== 2단계: 고유 패턴으로 확실한 값부터 추출 ===== */
-
-  /* 2-1) 평균 시청 지속 시간: H:MM 또는 HH:MM 패턴 (유일한 시간 형태) */
+  /* 1-1) 시간 패턴 (평균 시청 지속): H:MM 또는 HH:MM */
   var avgVal = '';
-  var timeMatch = fullText.match(/\d{1,2}:\d{2}/);
-  if(timeMatch) avgVal = timeMatch[0];
+  var timeMatches = fullText.match(/\b\d{1,2}:\d{2}\b/g) || [];
+  if(timeMatches.length > 0) avgVal = timeMatches[0];
 
-  /* 2-2) 노출 클릭률: N.N% 패턴 (유일한 % 형태) */
+  /* 1-2) 백분율 패턴 (노출 클릭률): N.N% */
   var ctrVal = '';
-  var pctMatch = fullText.match(/([\d.]+)\s*%/);
-  if(pctMatch) ctrVal = pctMatch[1] + '%';
-
-  /* 2-3) 모든 숫자(콤마 포함)를 추출하되, 시간(H:MM)과 %는 제외 */
-  var numText = fullText;
-  /* 시간 패턴 제거 */
-  numText = numText.replace(/\d{1,2}:\d{2}/g, ' ');
-  /* % 앞의 숫자 제거 */
-  numText = numText.replace(/[\d.]+\s*%/g, ' ');
-
-  var allNums = [];
-  var numRe = /[₩￦]?\s*([\d,]+(?:\.\d+)?)/g;
-  var nm;
-  while((nm = numRe.exec(numText)) !== null){
-    var raw = nm[0].trim();
-    var numOnly = nm[1].replace(/,/g,'');
-    var numVal = parseFloat(numOnly);
-    if(!isNaN(numVal) && numVal > 0){
-      allNums.push({raw: raw, val: numVal, hasCurrency: /[₩￦]/.test(raw)});
-    }
+  var pctMatches = fullText.match(/([\d.]+)\s*%/g) || [];
+  if(pctMatches.length > 0){
+    var pm = pctMatches[0].match(/([\d.]+)\s*%/);
+    if(pm) ctrVal = pm[1] + '%';
   }
-  /* 값 크기 내림차순 정렬 */
-  allNums.sort(function(a,b){ return b.val - a.val; });
-  console.log('추출된 숫자들:', allNums.map(function(n){return n.raw+'('+n.val+')'}).join(', '));
 
-  /* 2-4) 숫자 분류 규칙:
-   * 유튜브 스튜디오 채널 현황에서:
-   * - 예상 수익: 보통 가장 큰 숫자 (백만~천만 원)
-   * - 조회수: 두 번째로 큰 숫자 (십만~백만)
-   * - CPM, RPM: 천~만 단위, ₩ 접두어
-   * - 구독자: 천~만 단위
-   *
-   * 하지만 더 신뢰할 수 있는 방법: 키워드 인접성
-   */
+  /* 1-3) 통화 패턴 (₩ 접두어): ₩N,NNN */
+  var currencyMatches = [];
+  var currRe = /[₩￦W]\s*([\d,]+(?:\.\d+)?)/g;
+  var cm;
+  while((cm = currRe.exec(fullText)) !== null){
+    var numVal = parseFloat(cm[1].replace(/,/g,''));
+    if(!isNaN(numVal)) currencyMatches.push({raw: cm[0], num: cm[1], val: numVal});
+  }
+  currencyMatches.sort(function(a,b){return b.val - a.val});
 
-  /* ===== 3단계: 키워드 인접 매칭 (줄 기반) ===== */
+  /* 1-4) 일반 숫자 (₩ 없고, 시간/% 아닌 것) */
+  var plainText = fullText;
+  /* 시간 제거 */
+  plainText = plainText.replace(/\b\d{1,2}:\d{2}\b/g, '###TIME###');
+  /* % 숫자 제거 */
+  plainText = plainText.replace(/[\d.]+\s*%/g, '###PCT###');
+  /* ₩ 숫자 제거 */
+  plainText = plainText.replace(/[₩￦W]\s*[\d,]+(?:\.\d+)?/g, '###CURR###');
+
+  var plainNums = [];
+  var plainRe = /\b([\d,]{2,}(?:\.\d+)?)\b/g;
+  var pn;
+  while((pn = plainRe.exec(plainText)) !== null){
+    var numVal = parseFloat(pn[1].replace(/,/g,''));
+    if(!isNaN(numVal) && numVal > 0) plainNums.push({raw: pn[1], val: numVal});
+  }
+  plainNums.sort(function(a,b){return b.val - a.val});
+
+  console.log('시간:', avgVal);
+  console.log('백분율:', ctrVal);
+  console.log('통화('+currencyMatches.length+'):', currencyMatches.map(function(c){return c.raw}).join(', '));
+  console.log('일반숫자('+plainNums.length+'):', plainNums.map(function(n){return n.raw+'('+n.val+')'}).join(', '));
+
+  /* ===== 2단계: 값 매칭 ===== */
   /*
-   * 각 필드의 키워드가 포함된 줄에서 가장 가까운 숫자를 찾는다.
-   * 만약 같은 줄에 숫자가 없으면 바로 다음 줄에서 찾는다.
-   *
-   * 문제: 테이블의 헤더 행에 모든 키워드가 모여 있고,
-   *       값 행에 모든 숫자가 모여 있으면 이 방법이 안 통한다.
-   *
-   * 해결: 헤더 행에서 키워드 순서를 파악하고, 값 행에서 순서 매칭도 병행한다.
+   * 유튜브 스튜디오 채널 현황 7개 필드:
+   * - 평균 시청 지속 시간 → 시간 패턴 (유일)
+   * - 노출 클릭률 → 백분율 패턴 (유일)
+   * - 예상 수익 → ₩ + 가장 큰 숫자
+   * - 재생 기반 CPM → ₩ + 두 번째 큰 숫자
+   * - RPM → ₩ + 세 번째 큰 숫자
+   * - 조회수 → 일반숫자 중 가장 큰 것
+   * - 구독자 → 일반숫자 중 두 번째 큰 것
    */
 
-  var results = {
-    ch_avg: avgVal,
-    ch_ctr: ctrVal,
-    ch_views: '',
-    ch_subs: '',
-    ch_rev: '',
-    ch_cpm: '',
-    ch_rpm: ''
-  };
-
-  /* ===== 4단계: 헤더-값 순서 매칭 시도 ===== */
-  var fieldDefs = [
-    {id:'ch_avg',  keywords:['평균 시청 지속 시간','평균시청지속시간','평균 시청 지속','시청 지속 시간','시청지속시간','시청 지속']},
-    {id:'ch_cpm',  keywords:['재생 기반 CPM','재생기반 CPM','재생기반CPM','기반 CPM','기반CPM']},
-    {id:'ch_rpm',  keywords:['RPM']},
-    {id:'ch_views',keywords:['조회수','조회 수']},
-    {id:'ch_subs', keywords:['구독자']},
-    {id:'ch_rev',  keywords:['예상 수익','예상수익','수익']},
-    {id:'ch_ctr',  keywords:['노출 클릭률','노출클릭률','노출 클릭율','클릭률','클릭율']}
-  ];
-
-  /* 헤더가 여러 줄에 걸쳐 있을 수 있으므로, 연속된 줄을 합쳐서 헤더 찾기 */
-  var headerLine = '';
-  var headerEndIdx = -1;
-  for(var i=0; i<lines.length; i++){
-    /* 숫자가 주를 이루는 줄(값 행)이 나오면 헤더 탐색 중단 */
-    var numChars = (lines[i].match(/[\d₩￦%:,.]/g)||[]).length;
-    var totalChars = lines[i].replace(/\s/g,'').length;
-    if(totalChars > 0 && numChars / totalChars > 0.6){
-      headerEndIdx = i;
-      break;
-    }
-    headerLine += ' ' + lines[i];
-  }
-  headerLine = headerLine.trim();
-  console.log('합성 헤더:', headerLine);
-  console.log('헤더 끝 인덱스:', headerEndIdx);
-
-  /* 합성 헤더에서 키워드 순서 파악 */
-  var foundFields = [];
-  for(var fi=0;fi<fieldDefs.length;fi++){
-    var def = fieldDefs[fi];
-    var bestPos = -1, bestKw = '';
-    for(var ki=0;ki<def.keywords.length;ki++){
-      var p = headerLine.indexOf(def.keywords[ki]);
-      if(p > -1){ bestPos = p; bestKw = def.keywords[ki]; break; }
-    }
-    if(bestPos > -1){
-      foundFields.push({id:def.id, pos:bestPos, kw:bestKw});
-    }
-  }
-  foundFields.sort(function(a,b){return a.pos - b.pos});
-  console.log('헤더 필드 순서('+foundFields.length+'개):', foundFields.map(function(f){return f.id+'@'+f.pos}).join(', '));
-
-  /* 값 행 찾기 */
-  var valLine = '';
-  if(headerEndIdx >= 0 && headerEndIdx < lines.length){
-    /* headerEndIdx부터 값이 있는 줄들을 모은다 */
-    for(var vi=headerEndIdx; vi<Math.min(headerEndIdx+3, lines.length); vi++){
-      if(/[\d]/.test(lines[vi])){
-        valLine = lines[vi];
-        break;
-      }
-    }
-  }
-  console.log('값 행:', valLine);
-
-  if(valLine && foundFields.length >= 5){
-    /* 값 분리: 다양한 구분자 시도 */
-    var valParts = smartSplitValues(valLine);
-    console.log('값 파트('+valParts.length+'개):', JSON.stringify(valParts));
-
-    if(valParts.length === foundFields.length){
-      console.log('✅ 개수 일치! 순서 매칭');
-      for(var i=0;i<foundFields.length;i++){
-        results[foundFields[i].id] = cleanChannelValue(valParts[i], foundFields[i].id);
-        console.log('  '+foundFields[i].id+' ← "'+valParts[i]+'" → "'+results[foundFields[i].id]+'"');
-      }
-    } else {
-      console.log('개수 불일치, 패턴 분류로 전환');
-      classifyByPattern(allNums, results);
-    }
-  } else {
-    console.log('헤더 매칭 부족('+foundFields.length+'개), 패턴 분류 사용');
-    classifyByPattern(allNums, results);
+  var revVal='', cpmVal='', rpmVal='';
+  if(currencyMatches.length >= 3){
+    revVal = currencyMatches[0].num;
+    cpmVal = currencyMatches[1].num;
+    rpmVal = currencyMatches[2].num;
+  } else if(currencyMatches.length === 2){
+    /* CPM이 보통 RPM보다 크다 */
+    cpmVal = currencyMatches[0].num;
+    rpmVal = currencyMatches[1].num;
+  } else if(currencyMatches.length === 1){
+    revVal = currencyMatches[0].num;
   }
 
-  /* ===== 5단계: 결과 적용 ===== */
-  for(var key in results){
-    if(results[key]) setV(key, results[key]);
+  var viewsVal='', subsVal='';
+  if(plainNums.length >= 2){
+    viewsVal = plainNums[0].raw;
+    subsVal = plainNums[1].raw;
+  } else if(plainNums.length === 1){
+    viewsVal = plainNums[0].raw;
   }
 
-  /* 빈 필드 보충 */
-  fallbackFill(lines);
-  console.log('=== parseChannelOCR v3 완료 ===');
+  /* ₩가 하나도 인식 안 된 경우: 모든 숫자를 크기 순으로 분류 */
+  if(currencyMatches.length === 0 && plainNums.length >= 5){
+    revVal = plainNums[0].raw;   /* 가장 큰 숫자 = 수익 */
+    viewsVal = plainNums[1].raw; /* 두 번째 = 조회수 */
+    cpmVal = plainNums[2].raw;   /* 세 번째 = CPM */
+    subsVal = plainNums[3].raw;  /* 네 번째 = 구독자 */
+    rpmVal = plainNums[4].raw;   /* 다섯 번째 = RPM */
+  }
+
+  /* ===== 3단계: 결과 적용 ===== */
+  if(avgVal)   setV('ch_avg', avgVal);
+  if(ctrVal)   setV('ch_ctr', ctrVal);
+  if(viewsVal) setV('ch_views', viewsVal);
+  if(subsVal)  setV('ch_subs', cleanChannelValue(subsVal, 'ch_subs'));
+  if(revVal)   setV('ch_rev', revVal);
+  if(cpmVal)   setV('ch_cpm', cpmVal);
+  if(rpmVal)   setV('ch_rpm', rpmVal);
+
+  console.log('최종 결과: views='+viewsVal+', subs='+subsVal+', rev='+revVal+', cpm='+cpmVal+', rpm='+rpmVal+', ctr='+ctrVal+', avg='+avgVal);
 }
 
-/* 값 행을 스마트하게 분리 */
-function smartSplitValues(valLine){
-  /* 1차: 탭으로 분리 */
-  var parts = valLine.split(/\t+/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
-  if(parts.length >= 5) return parts;
-
-  /* 2차: 3개 이상 공백으로 분리 */
-  parts = valLine.split(/\s{3,}/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
-  if(parts.length >= 5) return parts;
-
-  /* 3차: 2개 이상 공백으로 분리 */
-  parts = valLine.split(/\s{2,}/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
-  if(parts.length >= 5) return parts;
-
-  /* 4차: 단일 공백으로 분리 후, ₩+숫자 합치기 */
-  parts = valLine.split(/\s+/).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
-  var merged = [];
-  for(var i=0;i<parts.length;i++){
-    /* ₩ 단독 → 다음 값과 합침 */
-    if(/^[₩￦]$/.test(parts[i]) && i+1<parts.length){
-      merged.push(parts[i]+parts[i+1]);
-      i++;
-    }
-    /* ↓ 등 화살표 단독 → 스킵하거나 앞/뒤 값에 합침 */
-    else if(/^[↓↑→←▼▲△▽]+$/.test(parts[i])){
-      /* 스킵 */
-    }
-    else {
-      merged.push(parts[i]);
-    }
-  }
-  return merged;
-}
-
-/* 패턴 기반 숫자 분류 */
-function classifyByPattern(allNums, results){
-  console.log('패턴 분류 시작, 숫자 '+allNums.length+'개');
-  /*
-   * 유튜브 스튜디오 채널 현황 숫자 크기 패턴:
-   * 예상 수익 > 조회수 >> CPM > RPM > 구독자
-   * (단, 채널 규모에 따라 다를 수 있음)
-   *
-   * ₩ 접두어가 있는 것: 예상 수익, CPM, RPM
-   * 없는 것: 조회수, 구독자
-   *
-   * 분류 전략:
-   * 1. ₩ 있는 것 중 가장 큰 것 = 예상 수익
-   * 2. ₩ 있는 것 중 작은 2개 = CPM, RPM (큰 것이 CPM)
-   * 3. ₩ 없는 것 중 가장 큰 것 = 조회수
-   * 4. ₩ 없는 것 중 나머지 = 구독자
-   */
-
-  var withCurrency = allNums.filter(function(n){ return n.hasCurrency; });
-  var withoutCurrency = allNums.filter(function(n){ return !n.hasCurrency; });
-
-  /* 통화 있는 숫자 처리 */
-  if(withCurrency.length >= 3){
-    if(!results.ch_rev) results.ch_rev = cleanChannelValue(withCurrency[0].raw, 'ch_rev');
-    if(!results.ch_cpm) results.ch_cpm = cleanChannelValue(withCurrency[1].raw, 'ch_cpm');
-    if(!results.ch_rpm) results.ch_rpm = cleanChannelValue(withCurrency[2].raw, 'ch_rpm');
-  } else if(withCurrency.length === 2){
-    if(!results.ch_cpm) results.ch_cpm = cleanChannelValue(withCurrency[0].raw, 'ch_cpm');
-    if(!results.ch_rpm) results.ch_rpm = cleanChannelValue(withCurrency[1].raw, 'ch_rpm');
-  } else if(withCurrency.length === 1){
-    if(!results.ch_rev) results.ch_rev = cleanChannelValue(withCurrency[0].raw, 'ch_rev');
-  }
-
-  /* 통화 없는 숫자 처리 */
-  if(withoutCurrency.length >= 2){
-    if(!results.ch_views) results.ch_views = cleanChannelValue(withoutCurrency[0].raw, 'ch_views');
-    if(!results.ch_subs) results.ch_subs = cleanChannelValue(withoutCurrency[1].raw, 'ch_subs');
-  } else if(withoutCurrency.length === 1){
-    if(!results.ch_views) results.ch_views = cleanChannelValue(withoutCurrency[0].raw, 'ch_views');
-  }
-
-  /* 통화 기호 없이 모든 숫자가 왔을 때 (₩를 OCR이 인식 못한 경우) */
-  if(!withCurrency.length && allNums.length >= 5){
-    /* 크기 순: 수익 > 조회수 > CPM > RPM ≈ 구독자 */
-    if(!results.ch_rev) results.ch_rev = cleanChannelValue(allNums[0].raw, 'ch_rev');
-    if(!results.ch_views) results.ch_views = cleanChannelValue(allNums[1].raw, 'ch_views');
-    /* CPM이 RPM보다 보통 크다 */
-    if(!results.ch_cpm) results.ch_cpm = cleanChannelValue(allNums[2].raw, 'ch_cpm');
-    if(!results.ch_subs) results.ch_subs = cleanChannelValue(allNums[3].raw, 'ch_subs');
-    if(!results.ch_rpm) results.ch_rpm = cleanChannelValue(allNums[4].raw, 'ch_rpm');
-  }
-
-  console.log('패턴 분류 결과:', JSON.stringify(results));
+/* OCR 원문을 디버그 영역에 표시 */
+function showOcrDebug(statusElId, rawText){
+  var statusEl = document.getElementById(statusElId);
+  if(!statusEl) return;
+  /* 기존 디버그 박스가 있으면 제거 */
+  var existingDbg = statusEl.parentNode.querySelector('.ocr-debug');
+  if(existingDbg) existingDbg.remove();
+  /* 새 디버그 박스 생성 */
+  var dbg = document.createElement('details');
+  dbg.className = 'ocr-debug';
+  dbg.style.cssText = 'margin-top:8px;background:#0f1117;border:1px solid #334155;border-radius:6px;padding:8px;font-size:11px;';
+  var sum = document.createElement('summary');
+  sum.style.cssText = 'cursor:pointer;color:#60a5fa;font-size:12px;';
+  sum.textContent = '🔍 OCR 원문 보기 (디버그)';
+  var pre = document.createElement('pre');
+  pre.style.cssText = 'white-space:pre-wrap;color:#94a3b8;margin-top:6px;max-height:200px;overflow-y:auto;';
+  pre.textContent = rawText;
+  dbg.appendChild(sum);
+  dbg.appendChild(pre);
+  statusEl.parentNode.insertBefore(dbg, statusEl.nextSibling);
 }
 
 /* 채널 값 정리 */
@@ -300,36 +182,7 @@ function cleanChannelValue(val, fieldId){
 /* 빈 필드 보충 */
 function fallbackFill(lines){
   var fullText = lines.join(' ');
-  var fieldMap = [
-    {id:'ch_views',kw:['조회수','조회 수'],pattern:/[\d,]+/},
-    {id:'ch_subs',kw:['구독자'],pattern:/[+\-]?\s*[\d,]+/},
-    {id:'ch_rev',kw:['예상 수익','예상수익','수익'],pattern:/[\d,]+/},
-    {id:'ch_cpm',kw:['재생 기반 CPM','재생기반','기반 CPM','CPM'],pattern:/[\d,]+/},
-    {id:'ch_rpm',kw:['RPM'],pattern:/[\d,]+/},
-    {id:'ch_ctr',kw:['노출 클릭률','노출 클릭율','클릭률','클릭율'],pattern:/[\d.]+%/},
-    {id:'ch_avg',kw:['평균 시청 지속','시청 지속','지속 시간','지속시간'],pattern:/\d{1,2}:\d{2}/}
-  ];
-  for(var fi=0;fi<fieldMap.length;fi++){
-    if(V(fieldMap[fi].id)) continue; /* 이미 값이 있으면 스킵 */
-    var fm=fieldMap[fi];
-    for(var li=0;li<lines.length;li++){
-      var line=lines[li], hasKw=false;
-      for(var ki=0;ki<fm.kw.length;ki++){ if(line.indexOf(fm.kw[ki])>-1){hasKw=true;break;} }
-      if(!hasKw) continue;
-      var match=line.match(fm.pattern);
-      if(match){setV(fm.id, cleanChannelValue(match[0],fm.id));break;}
-      if(li+1<lines.length){
-        var match2=lines[li+1].match(fm.pattern);
-        if(match2){setV(fm.id, cleanChannelValue(match2[0],fm.id));break;}
-      }
-    }
-  }
   if(!V('ch_avg')){var tm=fullText.match(/\d{1,2}:\d{2}/);if(tm)setV('ch_avg',tm[0]);}
-}
-
-function fallbackParse(lines){
-  console.log('fallbackParse 실행');
-  fallbackFill(lines);
 }
 
 /* ===== 콘텐츠 유형: 만 단위 변환 ===== */
@@ -352,6 +205,7 @@ function formatManPct(numStr, pctStr){
 /* ===== 콘텐츠 유형 OCR 파싱 ===== */
 function parseContentOCR(text){
   console.log('=== parseContentOCR 시작 ===');
+  showOcrDebug('ctOcrStatus', text);
   var lines = text.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>0;});
   for(var i=0;i<lines.length;i++) console.log('CL'+i+':',lines[i]);
   function getAllNumbers(line){
