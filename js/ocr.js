@@ -1,265 +1,333 @@
-/* ── js/ocr.js  v6 ─────────────────────────────────────────── */
-
-/* ── OCR 실행 ────────────────────────────────────────────── */
-function runOCR(img, statusEl, cb){
-  if(statusEl) statusEl.textContent='OCR 처리 중…';
-  Tesseract.recognize(img,'kor+eng',{logger:function(m){
-    if(statusEl && m.status) statusEl.textContent=m.status+' '+(m.progress*100|0)+'%';
-  }}).then(function(r){
-    if(statusEl) statusEl.textContent='OCR 완료';
-    cb(r.data.text);
-  }).catch(function(e){
-    if(statusEl) statusEl.textContent='OCR 오류: '+e.message;
-    console.error('OCR error',e);
+/* ===== OCR 공통 함수 ===== */
+function runOCR(imageFile,statusElId,callback){
+  var statusEl=document.getElementById(statusElId);
+  if(statusEl)statusEl.textContent='🔍 OCR 인식 중... (최초 실행 시 한국어 데이터 다운로드로 30초~1분 소요)';
+  Tesseract.recognize(imageFile,'kor+eng',{
+    logger:function(m){
+      if(statusEl && m.status)statusEl.textContent='🔍 '+m.status+(m.progress?' ('+Math.round(m.progress*100)+'%)':'');
+    }
+  }).then(function(result){
+    var text=result.data.text;
+    console.log('OCR raw text:\n',text);
+    if(statusEl){statusEl.textContent='✅ OCR 완료';statusEl.style.color='#34d399'}
+    toast('OCR 인식 완료','success');
+    if(callback)callback(text);
+  }).catch(function(err){
+    console.error('OCR error',err);
+    if(statusEl){statusEl.textContent='❌ OCR 실패: '+err.message;statusEl.style.color='#f87171'}
+    toast('OCR 실패','error');
   });
 }
 
-/* ── 채널현황 파서 (v5 — 정상 작동 확인) ─────────────────── */
+/* ===== 채널 현황 OCR 파싱 v5 ===== */
 function parseChannelOCR(text){
-  console.log('[CH-OCR] raw:\n'+text);
-  var lines=text.split(/\n/).map(function(l){return l.trim();}).filter(Boolean);
-  var all=lines.join(' ');
+  console.log('=== parseChannelOCR v5 시작 ===');
+  showOcrDebug('chOcrStatus', text);
 
-  /* 1) 평균 시청 시간 H:MM */
-  var avg=''; var mAvg=all.match(/(\d{1,2}:\d{2})/);
-  if(mAvg) avg=mAvg[1];
+  var fullText = text.replace(/\n/g, ' ');
 
-  /* 2) 클릭률 N.N% */
-  var ctr=''; var mCtr=all.match(/([\d.]+)\s*%/);
-  if(mCtr) ctr=mCtr[1]+'%';
+  /* 1) 시간 패턴 → ch_avg */
+  var avgVal = '';
+  var timeMatches = fullText.match(/\b\d{1,2}:\d{2}\b/g) || [];
+  if(timeMatches.length > 0) avgVal = timeMatches[0];
 
-  /* 3) 통화값 ₩ */
-  var currPat=/[₩￦W＼]\s*([\d,]+(?:\.\d+)?)/g;
-  var cm, currNums=[];
-  var currVals={};                       // 통화로 잡힌 숫자값 맵
-  while((cm=currPat.exec(all))){
-    var cv=parseFloat(cm[1].replace(/,/g,''));
-    currNums.push(cv);
-    currVals[cv]=true;
+  /* 2) 백분율 패턴 → ch_ctr */
+  var ctrVal = '';
+  var pm = fullText.match(/([\d.]+)\s*%/);
+  if(pm) ctrVal = pm[1] + '%';
+
+  /* 3) 통화(₩) 숫자 추출 → 수익, CPM, RPM */
+  var currencyNums = [];
+  var currRe = /[₩￦W][^\d]*([\d,]+(?:\.\d+)?)/g;
+  var cm;
+  while((cm = currRe.exec(fullText)) !== null){
+    var val = parseFloat(cm[1].replace(/,/g,''));
+    if(!isNaN(val)) currencyNums.push({num: cm[1], val: val});
   }
-  currNums.sort(function(a,b){return b-a;});
-  var rev = currNums[0]||'';
-  var cpm = currNums[1]||'';
-  var rpm = currNums[2]||'';
-  console.log('[CH-OCR] currency nums:', currNums);
+  currencyNums.sort(function(a,b){return b.val - a.val});
 
-  /* 4) 일반 숫자 (통화 제외) */
-  var noTime=all.replace(/\d{1,2}:\d{2}/g,'__');
-  var noPct=noTime.replace(/([\d.]+)\s*%/g,'__');
-  var noCurr=noPct.replace(/[₩￦W＼]\s*[\d,]+(?:\.\d+)?/g,'__');
-  var numPat=/([\d,]{2,})/g;
-  var nm, plainNums=[];
-  while((nm=numPat.exec(noCurr))){
-    var pv=parseFloat(nm[1].replace(/,/g,''));
-    if(pv>0 && !currVals[pv]) plainNums.push(pv);
+  var revVal='', cpmVal='', rpmVal='';
+  if(currencyNums.length >= 3){
+    revVal = currencyNums[0].num;
+    cpmVal = currencyNums[1].num;
+    rpmVal = currencyNums[2].num;
+  } else if(currencyNums.length === 2){
+    cpmVal = currencyNums[0].num;
+    rpmVal = currencyNums[1].num;
+  } else if(currencyNums.length === 1){
+    revVal = currencyNums[0].num;
   }
-  plainNums.sort(function(a,b){return b-a;});
-  var views=plainNums[0]||'';
-  var subs =plainNums[1]||'';
-  console.log('[CH-OCR] plain nums:', plainNums);
 
-  /* 5) 값 세팅 */
-  function fmt(n){return n?Number(n).toLocaleString():'';}
-  setV('ch_views',fmt(views));
-  setV('ch_subs', subs?('+'+fmt(subs)):'');
-  setV('ch_rev',  fmt(rev));
-  setV('ch_cpm',  fmt(cpm));
-  setV('ch_rpm',  fmt(rpm));
-  setV('ch_ctr',  ctr);
-  setV('ch_avg',  avg);
+  /* 4) 일반 숫자 추출: 시간, %, 통화 숫자를 모두 제외 */
+  /* 통화로 잡힌 숫자의 val 목록 → 동일 val을 가진 일반 숫자도 제외 */
+  var currVals = {};
+  for(var ci=0; ci<currencyNums.length; ci++){
+    currVals[currencyNums[ci].val] = true;
+  }
 
-  if(!avg){ fallbackFill(all); }
+  var cleanText = fullText;
+  cleanText = cleanText.replace(/\b\d{1,2}:\d{2}\b/g, ' ');  /* 시간 제거 */
+  cleanText = cleanText.replace(/[\d.]+\s*%/g, ' ');          /* % 제거 */
+
+  var allNums = [];
+  var numRe = /\b([\d,]{2,}(?:\.\d+)?)\b/g;
+  var nm;
+  while((nm = numRe.exec(cleanText)) !== null){
+    var numStr = nm[1];
+    var numVal = parseFloat(numStr.replace(/,/g,''));
+    if(isNaN(numVal) || numVal <= 0) continue;
+    /* 통화와 동일한 값이면 제외 */
+    if(currVals[numVal]) continue;
+    allNums.push({raw: numStr, val: numVal});
+  }
+  allNums.sort(function(a,b){return b.val - a.val});
+
+  console.log('통화:', currencyNums.map(function(c){return c.num+'('+c.val+')'}).join(', '));
+  console.log('일반숫자(통화제외):', allNums.map(function(n){return n.raw+'('+n.val+')'}).join(', '));
+
+  /* 5) 조회수, 구독자 매칭 */
+  var viewsVal='', subsVal='';
+  if(allNums.length >= 2){
+    viewsVal = allNums[0].raw;
+    subsVal = allNums[1].raw;
+  } else if(allNums.length === 1){
+    viewsVal = allNums[0].raw;
+  }
+
+  /* ₩ 미인식 fallback: 통화 0개이고 일반숫자 5개 이상 */
+  if(currencyNums.length === 0 && allNums.length >= 5){
+    revVal = allNums[0].raw;
+    viewsVal = allNums[1].raw;
+    cpmVal = allNums[2].raw;
+    subsVal = allNums[3].raw;
+    rpmVal = allNums[4].raw;
+  }
+
+  /* 6) 결과 적용 */
+  if(avgVal)   setV('ch_avg', avgVal);
+  if(ctrVal)   setV('ch_ctr', ctrVal);
+  if(viewsVal) setV('ch_views', viewsVal);
+  if(subsVal)  setV('ch_subs', cleanChannelValue(subsVal, 'ch_subs'));
+  if(revVal)   setV('ch_rev', revVal);
+  if(cpmVal)   setV('ch_cpm', cpmVal);
+  if(rpmVal)   setV('ch_rpm', rpmVal);
+
+  console.log('v5 최종: views='+viewsVal+', subs='+subsVal+', rev='+revVal+', cpm='+cpmVal+', rpm='+rpmVal+', ctr='+ctrVal+', avg='+avgVal);
 }
 
-function cleanChannelValue(v,field){
-  v=v.replace(/[₩￦W＼]/g,'').replace(/[\s]/g,'').replace(/^[+\-]?0+(?=\d)/,'');
-  if(field==='ch_subs' && !/^[+\-]/.test(v)) v='+'+v;
-  if(field==='ch_ctr' && v && !/%/.test(v)) v=v+'%';
+/* OCR 원문을 디버그 영역에 표시 */
+function showOcrDebug(statusElId, rawText){
+  var statusEl = document.getElementById(statusElId);
+  if(!statusEl) return;
+  var existingDbg = statusEl.parentNode.querySelector('.ocr-debug');
+  if(existingDbg) existingDbg.remove();
+  var dbg = document.createElement('details');
+  dbg.className = 'ocr-debug';
+  dbg.style.cssText = 'margin-top:8px;background:#0f1117;border:1px solid #334155;border-radius:6px;padding:8px;font-size:11px;';
+  var sum = document.createElement('summary');
+  sum.style.cssText = 'cursor:pointer;color:#60a5fa;font-size:12px;';
+  sum.textContent = '🔍 OCR 원문 보기 (디버그)';
+  var pre = document.createElement('pre');
+  pre.style.cssText = 'white-space:pre-wrap;color:#94a3b8;margin-top:6px;max-height:200px;overflow-y:auto;';
+  pre.textContent = rawText;
+  dbg.appendChild(sum);
+  dbg.appendChild(pre);
+  statusEl.parentNode.insertBefore(dbg, statusEl.nextSibling);
+}
+
+/* 채널 값 정리 */
+function cleanChannelValue(val, fieldId){
+  var v = (val||'').trim();
+  v = v.replace(/^[₩￦]+\s*/,'').trim();
+  v = v.replace(/[↓↑→←▼▲△▽]/g,'').trim();
+  if(fieldId === 'ch_subs'){
+    if(!/^[+\-]/.test(v) && /\d/.test(v)) v = '+' + v;
+  }
+  if(fieldId === 'ch_ctr'){
+    if(/\d/.test(v) && v.indexOf('%')===-1) v = v + '%';
+  }
   return v;
 }
 
-function fallbackFill(all){
-  if(!getV('ch_avg')){
-    var m=all.match(/(\d{1,2}:\d{2})/);
-    if(m) setV('ch_avg',m[1]);
-  }
+/* 빈 필드 보충 */
+function fallbackFill(lines){
+  var fullText = lines.join(' ');
+  if(!V('ch_avg')){var tm=fullText.match(/\d{1,2}:\d{2}/);if(tm)setV('ch_avg',tm[0]);}
 }
 
-/* ── 숫자 포맷 (만 단위 + 퍼센트) ───────────────────────── */
-function formatManPct(numStr,pctStr){
-  var n=parseFloat(String(numStr).replace(/,/g,''));
-  if(isNaN(n)) return String(numStr)+(pctStr?'('+pctStr+')':'');
-  var display;
-  if(n>=10000){
-    var man=n/10000;
-    display=(man%1===0?man.toFixed(0):man.toFixed(1))+'만';
+/* ===== 콘텐츠 유형: 만 단위 변환 ===== */
+function formatManPct(numStr, pctStr){
+  var n = parseFloat((numStr||'').replace(/,/g,''));
+  var p = parseFloat((pctStr||'').replace(/[()%]/g,'').trim());
+  if(isNaN(n) || isNaN(p)) return '';
+  var manStr;
+  if(n >= 10000){
+    var man = n / 10000;
+    manStr = man >= 100 ? Math.round(man)+'만' : man.toFixed(1).replace(/\.0$/,'')+'만';
+  } else if(n >= 1000){
+    manStr = commaNum(Math.round(n));
   } else {
-    display=n.toLocaleString();
+    manStr = n % 1 === 0 ? String(n) : n.toFixed(1);
   }
-  return pctStr ? display+'('+pctStr+')' : display;
+  return manStr + '(' + p.toFixed(1).replace(/\.0$/,'') + '%)';
 }
 
-/* ── 콘텐츠 유형 파서 (v3 — 완전 재작성) ────────────────── */
+/* ===== 콘텐츠 유형 OCR 파싱 (v2) ===== */
 function parseContentOCR(text){
-  console.log('[CT-OCR] raw:\n'+text);
+  console.log('=== parseContentOCR v2 시작 ===');
+  showOcrDebug('ctOcrStatus', text);
+  var lines = text.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>0;});
+  for(var i=0;i<lines.length;i++) console.log('CL'+i+':',lines[i]);
 
-  var lines=text.split(/\n/).map(function(l){return l.trim();}).filter(Boolean);
-  var all=lines.join(' ');
-
-  /* ── 행 감지: 동영상 / Shorts 키워드가 포함된 줄 찾기 ── */
-  var videoLine='', shortsLine='';
-  for(var i=0;i<lines.length;i++){
-    var lo=lines[i].toLowerCase();
-    if(!videoLine && (/동영상/.test(lines[i]) || /video/i.test(lines[i]))){
-      // 다음 줄이 숫자로 시작하면 합치기
-      videoLine=lines[i];
-      if(i+1<lines.length && /^\d/.test(lines[i+1].replace(/[^\d]/,''))){
-        videoLine+=' '+lines[i+1];
-      }
-    }
-    if(!shortsLine && (/shorts/i.test(lo) || /쇼츠/.test(lines[i]))){
-      shortsLine=lines[i];
-      if(i+1<lines.length && /^\d/.test(lines[i+1].replace(/[^\d]/,''))){
-        shortsLine+=' '+lines[i+1];
-      }
-    }
+  function cleanLine(line){
+    /* 줄 앞부분의 라벨/아이콘 잔해 제거: 동영상/Shorts 키워드 앞의 노이즈 */
+    line = line.replace(/^[^\d가-힣A-Za-z]*/, '');
+    /* "동영상" 또는 "Shorts" 키워드와 그 앞의 잡 문자 제거 */
+    line = line.replace(/^.*?(동영상|[Ss]horts|쇼츠)/, '$1');
+    return line;
   }
-  console.log('[CT-OCR] videoLine:', videoLine);
-  console.log('[CT-OCR] shortsLine:', shortsLine);
 
-  /* ── 행에서 숫자 + 퍼센트 추출 ── */
-  function extractRow(line){
-    if(!line) return {n1:'',p1:'',n2:'',p2:''};
+  function parseDataRow(line){
+    /* 라벨(동영상/Shorts) 제거하고 숫자 부분만 남김 */
+    var numPart = line.replace(/^.*?(동영상|[Ss]horts|쇼츠)\s*/, '');
 
-    // 키워드 제거
-    var data=line.replace(/^.*?(동영상|[Ss]horts|쇼츠|[Vv]ideo)\s*/,'');
-
-    // 시간 형식(H:MM:SS 등) 제거 — 숫자로 오인 방지
-    data=data.replace(/\d{1,2}:\d{2}(:\d{2})?/g,' ');
-
-    // 모든 토큰 추출: 숫자 또는 퍼센트
-    var tokens=[];
-    var re=/([\d,]+\.?\d*)\s*(%)?/g;
+    /* 모든 숫자 추출 (시간 형태 제외) */
+    var timeless = numPart.replace(/\d+:\d+/g, function(m){return ' '.repeat(m.length);});
+    var allNums = [];
+    var re = /(\d[\d,]*\.?\d*)/g;
     var m;
-    while((m=re.exec(data))){
-      var val=m[1].replace(/,/g,'');
-      var isPct=!!m[2];
-      var numVal=parseFloat(val);
-
-      // 1자리 노이즈 제거 (£1, [J 등에서 나온 1)
-      if(val.length===1 && numVal<10 && !isPct) continue;
-
-      tokens.push({raw:m[1], num:numVal, pct:isPct});
+    while((m = re.exec(timeless)) !== null){
+      allNums.push({val: m[1], pos: m.index});
     }
-    console.log('[CT-OCR] tokens:', JSON.stringify(tokens));
 
-    // 숫자와 퍼센트 분리
-    var nums=[], pcts=[];
-    for(var j=0;j<tokens.length;j++){
-      if(tokens[j].pct){
-        pcts.push(tokens[j]);
+    /* % 위치 추출 */
+    var pctPositions = [];
+    var pctRe = /%/g;
+    var pm;
+    while((pm = pctRe.exec(numPart)) !== null){
+      pctPositions.push(pm.index);
+    }
+
+    /* 숫자를 일반 숫자와 % 숫자로 분류 */
+    var dataNums = [], pctNums = [];
+    for(var ni=0; ni<allNums.length; ni++){
+      var numEnd = allNums[ni].pos + allNums[ni].val.length;
+      var isPct = false;
+      for(var pi=0; pi<pctPositions.length; pi++){
+        var gap = numPart.substring(numEnd, pctPositions[pi]);
+        if(gap.length <= 3 && /^\s*$/.test(gap)){isPct=true; break;}
+      }
+      if(isPct){
+        pctNums.push(allNums[ni].val);
       } else {
-        nums.push(tokens[j]);
+        /* 한 자리 숫자는 무시 (OCR 잡 노이즈) */
+        var nv = parseFloat(allNums[ni].val.replace(/,/g,''));
+        if(allNums[ni].val.replace(/,/g,'').length >= 2 || nv >= 10){
+          dataNums.push(allNums[ni].val);
+        }
       }
     }
 
-    // 퍼센트가 숫자에 비해 비정상적으로 크면 보정 (327% → 32.7%)
-    function fixPct(p){
-      var v=parseFloat(p);
-      if(isNaN(v)) return p;
-      if(v>100) return (v/10).toFixed(1)+'%';
-      return v+'%';
+    console.log('  dataNums:', JSON.stringify(dataNums), 'pctNums:', JSON.stringify(pctNums));
+
+    return{
+      viewNum:  dataNums[0] || '',
+      viewPct:  pctNums[0] || '',
+      watchNum: dataNums[1] || '',
+      watchPct: pctNums[1] || ''
+    };
+  }
+
+  var videoRow=null, shortsRow=null;
+  for(var i=0;i<lines.length;i++){
+    var line = lines[i];
+    if(/합계/.test(line)) continue;
+    var isVideo = /동영상/.test(line);
+    var isShorts = /[Ss]horts|쇼츠/.test(line);
+    if(!isVideo && !isShorts) continue;
+
+    var cleaned = cleanLine(line);
+    var data = parseDataRow(cleaned);
+
+    /* 데이터가 부족하면 다음 줄도 합쳐서 재시도 */
+    if((!data.viewNum || !data.viewPct || !data.watchNum || !data.watchPct)
+       && i+1 < lines.length
+       && !/합계|동영상|[Ss]horts|쇼츠/.test(lines[i+1])){
+      data = parseDataRow(cleaned + '  ' + lines[i+1]);
     }
 
-    var n1=nums[0]?nums[0].raw:'';
-    var p1=pcts[0]?fixPct(pcts[0].num):'';
-    var n2=nums[1]?nums[1].raw:'';
-    var p2=pcts[1]?fixPct(pcts[1].num):'';
-
-    return {n1:n1, p1:p1, n2:n2, p2:p2};
+    if(isVideo)  videoRow = data;
+    if(isShorts) shortsRow = data;
   }
 
-  var vr=extractRow(videoLine);
-  var sr=extractRow(shortsLine);
+  console.log('videoRow:', JSON.stringify(videoRow));
+  console.log('shortsRow:', JSON.stringify(shortsRow));
 
-  console.log('[CT-OCR] video parsed:', vr);
-  console.log('[CT-OCR] shorts parsed:', sr);
-
-  /* ── 퍼센트 교차 보정 ── */
-  // 동영상 + Shorts 의 p1 합이 ~100이어야 하고, p2 합도 ~100이어야 함
-  function pVal(s){return parseFloat(String(s).replace('%',''))||0;}
-
-  var vp1=pVal(vr.p1), sp1=pVal(sr.p1);
-  var vp2=pVal(vr.p2), sp2=pVal(sr.p2);
-
-  // 합이 안 맞으면 빈 쪽을 100-x로 채움
-  if(vr.p1 && !sr.p1 && vp1>0) sr.p1=(100-vp1).toFixed(1)+'%';
-  if(sr.p1 && !vr.p1 && sp1>0) vr.p1=(100-sp1).toFixed(1)+'%';
-  if(vr.p2 && !sr.p2 && vp2>0) sr.p2=(100-vp2).toFixed(1)+'%';
-  if(sr.p2 && !vr.p2 && sp2>0) vr.p2=(100-sp2).toFixed(1)+'%';
-
-  /* ── 조회수 vs 시청시간 열 구분 ── */
-  // 일반적으로 조회수 > 시청시간(시간 단위), 조회수 열이 먼저 나옴
-  var vn1=parseFloat(String(vr.n1).replace(/,/g,''))||0;
-  var vn2=parseFloat(String(vr.n2).replace(/,/g,''))||0;
-
-  var viewFirst=true;
-  // 두번째 수가 첫번째보다 훨씬 크면 시청시간이 먼저일 수 있음
-  if(vn2>0 && vn1>0 && vn2>vn1*10) viewFirst=false;
-
-  var vidView, vidViewP, vidWatch, vidWatchP;
-  var shrView, shrViewP, shrWatch, shrWatchP;
-
-  if(viewFirst){
-    vidView=vr.n1; vidViewP=vr.p1; vidWatch=vr.n2; vidWatchP=vr.p2;
-    shrView=sr.n1; shrViewP=sr.p1; shrWatch=sr.n2; shrWatchP=sr.p2;
-  } else {
-    vidWatch=vr.n1; vidWatchP=vr.p1; vidView=vr.n2; vidViewP=vr.p2;
-    shrWatch=sr.n1; shrWatchP=sr.p1; shrView=sr.n2; shrViewP=sr.p2;
+  /* % 보정 */
+  function fixPct(p1str, p2str){
+    var p1=parseFloat(p1str); var p2=parseFloat(p2str);
+    if(isNaN(p1)&&isNaN(p2)) return [p1str,p2str];
+    if(isNaN(p1)&&!isNaN(p2)) return [String(Math.round((100-p2)*10)/10),String(p2)];
+    if(!isNaN(p1)&&isNaN(p2)) return [String(p1),String(Math.round((100-p1)*10)/10)];
+    var sum=p1+p2;
+    /* 정상 범위 */
+    if(sum>=99 && sum<=101) return [String(p1),String(p2)];
+    /* 10배 오류 (예: 673 + 327 = 1000 → 67.3 + 32.7) */
+    if(sum>=900 && sum<=1100) return [String(Math.round(p1/10*10)/10),String(Math.round(p2/10*10)/10)];
+    /* 한쪽만 10배 (예: 67.3 + 327 → 67.3 + 32.7) */
+    if(p1<100 && p2>=100){
+      var f2=p2/10;
+      if(Math.abs(p1+f2-100)<3) return [String(p1),String(Math.round(f2*10)/10)];
+    }
+    if(p2<100 && p1>=100){
+      var f1=p1/10;
+      if(Math.abs(f1+p2-100)<3) return [String(Math.round(f1*10)/10),String(p2)];
+    }
+    /* 소수점 누락 (예: 673 → 67.3) */
+    if(p1>100) p1=p1/10;
+    if(p2>100) p2=p2/10;
+    return [String(Math.round(p1*10)/10),String(Math.round(p2*10)/10)];
   }
 
-  /* ── UI 세팅 ── */
-  setV('ct_vv', formatManPct(vidView, vidViewP));
-  setV('ct_vw', formatManPct(vidWatch, vidWatchP));
-  setV('ct_sv', formatManPct(shrView, shrViewP));
-  setV('ct_sw', formatManPct(shrWatch, shrWatchP));
+  if(videoRow && shortsRow){
+    var fv = fixPct(videoRow.viewPct, shortsRow.viewPct);
+    videoRow.viewPct = fv[0];
+    shortsRow.viewPct = fv[1];
+    var fw = fixPct(videoRow.watchPct, shortsRow.watchPct);
+    videoRow.watchPct = fw[0];
+    shortsRow.watchPct = fw[1];
+  } else if(shortsRow && !videoRow){
+    var sp=parseFloat(shortsRow.viewPct);
+    if(!isNaN(sp)&&sp>100) shortsRow.viewPct=String(Math.round(sp/10*10)/10);
+    var swp=parseFloat(shortsRow.watchPct);
+    if(!isNaN(swp)&&swp>100) shortsRow.watchPct=String(Math.round(swp/10*10)/10);
+  }
+
+  console.log('보정 후 videoRow:', JSON.stringify(videoRow));
+  console.log('보정 후 shortsRow:', JSON.stringify(shortsRow));
+
+  /* 열 순서 감지 */
+  var colOrder='views_first';
+  for(var i=0;i<lines.length;i++){
+    if(/조회\s*수/.test(lines[i]) && /시청/.test(lines[i])){
+      var vp=lines[i].search(/조회\s*수/);
+      var wp=lines[i].search(/시청/);
+      if(wp>=0 && vp>=0 && wp<vp) colOrder='watch_first';
+      break;
+    }
+  }
+
+  /* 결과 적용 */
+  if(videoRow){
+    var vv=formatManPct(videoRow.viewNum, videoRow.viewPct);
+    var vw=formatManPct(videoRow.watchNum, videoRow.watchPct);
+    if(colOrder==='views_first'){setV('ct_vv',vv);setV('ct_vw',vw);}
+    else{setV('ct_vw',vv);setV('ct_vv',vw);}
+  }
+  if(shortsRow){
+    var sv=formatManPct(shortsRow.viewNum, shortsRow.viewPct);
+    var sw=formatManPct(shortsRow.watchNum, shortsRow.watchPct);
+    if(colOrder==='views_first'){setV('ct_sv',sv);setV('ct_sw',sw);}
+    else{setV('ct_sw',sv);setV('ct_sv',sw);}
+  }
 }
-
-/* ── 이미지 업로드 핸들러 ────────────────────────────────── */
-// 채널현황 이미지
-var chImgEl=document.getElementById('chImg');
-if(chImgEl) chImgEl.addEventListener('change',function(e){
-  var f=e.target.files[0]; if(!f) return;
-
-  // 기존 데이터 초기화
-  ['ch_views','ch_subs','ch_rev','ch_cpm','ch_rpm','ch_ctr','ch_avg'].forEach(function(id){setV(id,'');});
-
-  // 이미지 미리보기
-  var prev=document.getElementById('chImgP');
-  if(prev){ prev.src=URL.createObjectURL(f); prev.style.display='block'; }
-
-  // 상태 초기화
-  var st=document.getElementById('chOcrStatus');
-  if(st) st.textContent='';
-
-  runOCR(f, st, parseChannelOCR);
-});
-
-// 콘텐츠유형 이미지
-var ctImgEl=document.getElementById('ctImg');
-if(ctImgEl) ctImgEl.addEventListener('change',function(e){
-  var f=e.target.files[0]; if(!f) return;
-
-  // 기존 데이터 초기화
-  ['ct_vv','ct_vw','ct_sv','ct_sw','ct2_vv','ct2_vw','ct2_sv','ct2_sw'].forEach(function(id){setV(id,'');});
-
-  // 이미지 미리보기
-  var prev=document.getElementById('ctImgP');
-  if(prev){ prev.src=URL.createObjectURL(f); prev.style.display='block'; }
-
-  // 상태 초기화
-  var st=document.getElementById('ctOcrStatus');
-  if(st) st.textContent='';
-
-  runOCR(f, st, parseContentOCR);
-});
