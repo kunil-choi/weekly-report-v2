@@ -45,6 +45,10 @@ function parsePrevReport(html){
   var div=document.createElement('div');
   div.innerHTML=html;
   var tables=div.querySelectorAll('table');
+
+  /* [수정1] docx에서 일정 테이블 파싱: 녹화, 특이사항만 추출 */
+  S._prevSchedule = [];
+
   for(var ti=0;ti<tables.length;ti++){
     var rows=tables[ti].querySelectorAll('tr');
     var headerText='';
@@ -86,5 +90,28 @@ function parsePrevReport(html){
         }
       }
     }
+
+    /* [수정1] 일정 테이블에서 녹화/특이사항 추출 */
+    if(headerText.indexOf('날짜')>-1 && (headerText.indexOf('녹화')>-1 || headerText.indexOf('스튜디오')>-1)){
+      /* 헤더에서 각 컬럼 인덱스 찾기 */
+      var hdCells = rows[0].querySelectorAll('td,th');
+      var colDate=-1, colRec=-1, colNote=-1;
+      for(var ci=0;ci<hdCells.length;ci++){
+        var ct=(hdCells[ci].textContent||'').trim();
+        if(ct.indexOf('날짜')>-1) colDate=ci;
+        if(ct.indexOf('녹화')>-1 || ct.indexOf('스튜디오')>-1) colRec=ci;
+        if(ct.indexOf('특이')>-1) colNote=ci;
+      }
+      for(var ri=1;ri<rows.length;ri++){
+        var cells=rows[ri].querySelectorAll('td');
+        var dateVal = colDate>=0 && cells[colDate] ? (cells[colDate].textContent||'').trim() : '';
+        var recVal  = colRec>=0 && cells[colRec]  ? (cells[colRec].textContent||'').trim() : '';
+        var noteVal = colNote>=0 && cells[colNote] ? (cells[colNote].textContent||'').trim() : '';
+        if(dateVal){
+          S._prevSchedule.push({date:dateVal, rec:recVal, note:noteVal});
+        }
+      }
+    }
   }
+  console.log('_prevSchedule extracted:', S._prevSchedule.length, 'rows');
 }
