@@ -1,129 +1,398 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>머니올라 주간 보고서 생성기</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-<div id="toast-container"></div>
-<div class="progress-bar">
-<div class="step-ind active" data-s="1">① 시작</div>
-<div class="step-ind" data-s="2">② 수집</div>
-<div class="step-ind" data-s="3">③ 채널현황</div>
-<div class="step-ind" data-s="4">④ 콘텐츠유형</div>
-<div class="step-ind" data-s="5">⑤ 구독자·메모</div>
-<div class="step-ind" data-s="6">⑥ 미리보기</div>
-</div>
-<div class="container">
+/* ── css/style.css ─────────────────────────────────────────── */
 
-<!-- STEP 1 -->
-<div class="panel active" id="step1"><div class="card tc">
-<div class="main-title">머니올라 주간 보고서 생성기</div>
-<p class="main-sub">매주 화요일, 지난주 실적과 이번주 계획을 자동 정리합니다.</p>
-<div class="upload-area"><div style="font-size:40px">📄</div><div style="color:#94a3b8">지난주 보고서(.docx) 업로드 → 지지난주 데이터 자동 추출</div><div id="fn1" style="color:#3b82f6;font-weight:600;margin-top:8px"></div><input type="file" accept=".docx" id="fi1"></div>
-<div id="prevDocStatus" class="ocr-status tc"></div>
-<div class="date-ov mt3"><label>📅 기준 날짜 수동 지정 (선택)</label><input type="date" id="manDate" class="mt2" style="max-width:220px"><p class="ts tm mt2">비워두면 오늘 날짜를 사용합니다.</p></div>
-<div id="dateDisp" class="mt3 hidden"></div>
-<button class="btn btn-p mt4" id="btnStart">작성 시작 →</button>
-</div></div>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-<!-- STEP 2 -->
-<div class="panel" id="step2"><div class="card">
-<div class="spinner-wrap" id="s2load"><div class="spinner"></div><p>Google Apps Script에서 데이터를 수집 중...</p><p class="ts tm mt2" id="s2status">준비 중...</p></div>
-<div id="s2result" class="hidden">
-<h2>📋 수집 결과</h2><div id="s2log" class="log-box"></div>
-<h3>📺 지난주 업로드 영상 (유튜브)</h3><div id="ytR"></div>
-<h3 class="mt3">📅 지난주 일정</h3><div id="schLast"></div>
-<h3 class="mt3">📅 이번주 일정</h3><div id="schThis"></div>
-<div class="nav-row"><button class="btn btn-s" onclick="go(1)">← 이전</button><button class="btn btn-p" onclick="go(3)">다음 →</button></div>
-</div></div></div>
+body {
+  font-family: 'Noto Sans KR', sans-serif;
+  background: #0f1923;
+  color: #e0e0e0;
+  min-height: 100vh;
+  padding: 20px;
+}
 
-<!-- STEP 3 -->
-<div class="panel" id="step3"><div class="card">
-<h2>📊 채널 현황</h2><p class="sub">스크린샷을 업로드하면 OCR로 자동 인식합니다. 인식 후 수정도 가능합니다.</p>
-<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">채널 현황 이미지 업로드 (자동 OCR)</div><input type="file" accept="image/*" id="chImg"></div>
-<img id="chImgP" class="img-preview hidden">
-<div id="chOcrStatus" class="ocr-status"></div>
-<h3>지난주 데이터</h3>
-<div class="flex fw g2">
-<div class="fg" style="flex:1;min-width:140px"><label>조회수</label><input type="text" id="ch_views"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>구독자 변화</label><input type="text" id="ch_subs"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>예상 수익</label><input type="text" id="ch_rev"></div>
-</div>
-<div class="flex fw g2">
-<div class="fg" style="flex:1;min-width:140px"><label>재생 기반 CPM</label><input type="text" id="ch_cpm"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>RPM</label><input type="text" id="ch_rpm"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>노출 클릭률</label><input type="text" id="ch_ctr"></div>
-</div>
-<div class="fg" style="max-width:200px"><label>평균 시청 지속시간</label><input type="text" id="ch_avg"></div>
-<h3>지지난주 데이터</h3>
-<p class="ts tm mb3">← 지난주 보고서(.docx)에서 자동 추출됩니다</p>
-<div class="flex fw g2">
-<div class="fg" style="flex:1;min-width:140px"><label>조회수</label><input type="text" id="ch2_views"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>구독자 변화</label><input type="text" id="ch2_subs"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>예상 수익</label><input type="text" id="ch2_rev"></div>
-</div>
-<div class="flex fw g2">
-<div class="fg" style="flex:1;min-width:140px"><label>재생 기반 CPM</label><input type="text" id="ch2_cpm"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>RPM</label><input type="text" id="ch2_rpm"></div>
-<div class="fg" style="flex:1;min-width:140px"><label>노출 클릭률</label><input type="text" id="ch2_ctr"></div>
-</div>
-<div class="fg" style="max-width:200px"><label>평균 시청 지속시간</label><input type="text" id="ch2_avg"></div>
-<div class="nav-row"><button class="btn btn-s" onclick="go(2)">← 이전</button><button class="btn btn-p" onclick="saveS3();go(4)">다음 →</button></div>
-</div></div>
+/* ── 진행 표시 바 ── */
+#progressBar {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 0;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
 
-<!-- STEP 4 -->
-<div class="panel" id="step4"><div class="card">
-<h2>📺 콘텐츠 유형별</h2><p class="sub">스크린샷을 업로드하면 OCR로 자동 인식합니다.</p>
-<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">콘텐츠 유형 이미지 업로드 (자동 OCR)</div><input type="file" accept="image/*" id="ctImg"></div>
-<img id="ctImgP" class="img-preview hidden">
-<div id="ctOcrStatus" class="ocr-status"></div>
-<h3>지난주</h3>
-<table class="tbl"><tr><th></th><th>조회수</th><th>시청 시간</th></tr>
-<tr><td><b>동영상</b></td><td><input type="text" id="ct_vv" style="width:160px" placeholder="예: 34.9만(69.4%)"></td><td><input type="text" id="ct_vw" style="width:160px" placeholder="예: 6.3만(98.7%)"></td></tr>
-<tr><td><b>Shorts</b></td><td><input type="text" id="ct_sv" style="width:160px" placeholder="예: 15.4만(30.6%)"></td><td><input type="text" id="ct_sw" style="width:160px" placeholder="예: 828.5(1.3%)"></td></tr></table>
-<h3>지지난주 데이터</h3>
-<p class="ts tm mb3">← 지난주 보고서(.docx)에서 자동 추출됩니다</p>
-<table class="tbl"><tr><th></th><th>조회수</th><th>시청 시간</th></tr>
-<tr><td><b>동영상</b></td><td><input type="text" id="ct2_vv" style="width:160px"></td><td><input type="text" id="ct2_vw" style="width:160px"></td></tr>
-<tr><td><b>Shorts</b></td><td><input type="text" id="ct2_sv" style="width:160px"></td><td><input type="text" id="ct2_sw" style="width:160px"></td></tr></table>
-<div class="nav-row"><button class="btn btn-s" onclick="go(3)">← 이전</button><button class="btn btn-p" onclick="saveS4();go(5)">다음 →</button></div>
-</div></div>
+.prog-step {
+  background: #1e2d3d;
+  color: #8899aa;
+  border: 1px solid #2a3a4a;
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-family: 'Noto Sans KR', sans-serif;
+  cursor: pointer;
+  transition: all 0.3s;
+}
 
-<!-- STEP 5 -->
-<div class="panel" id="step5"><div class="card">
-<h2>👥 구독자 & 팀원 메모</h2>
-<div class="fg"><label>현재 구독자 수 (<span id="todayL"></span>)</label><input type="text" id="curSubs" placeholder="숫자만 입력하면 자동 콤마"></div>
-<h3>팀원 특이사항</h3>
-<div class="fg"><label>양영은</label><textarea id="noteY"></textarea></div>
-<div class="fg"><label>최건일</label><textarea id="noteC"></textarea></div>
-<div class="nav-row"><button class="btn btn-s" onclick="go(4)">← 이전</button><button class="btn btn-p" onclick="saveS5();buildPreview();go(6)">다음 →</button></div>
-</div></div>
+.prog-step:hover {
+  background: #253545;
+}
 
-<!-- STEP 6 -->
-<div class="panel" id="step6"><div class="card">
-<h2>📝 미리보기 & 다운로드</h2><p class="sub">각 셀을 클릭하여 수정 가능합니다.</p>
-<div id="prevArea"></div>
-<div class="nav-row"><button class="btn btn-s" onclick="go(5)">← 이전</button><button class="btn btn-g" id="btnGen">✅ 문서 생성 (.docx)</button></div>
-</div></div>
+.prog-step.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
 
-</div>
+.prog-step.done {
+  background: #1a4a2e;
+  color: #6ee7b7;
+  border-color: #2a6a3e;
+}
 
-<!-- 외부 라이브러리 -->
-<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
+/* ── 컨테이너 ── */
+#container {
+  max-width: 900px;
+  margin: 0 auto;
+}
 
-<!-- 앱 모듈 -->
-<script src="js/app.js"></script>
-<script src="js/docx-parse.js"></script>
-<script src="js/ocr.js"></script>
-<script src="js/gas.js"></script>
-<script src="js/preview.js"></script>
-<script src="js/export.js"></script>
-</body>
-</html>
+/* ── 패널 ── */
+.panel {
+  background: #1a2636;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+.panel h2 {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #f0f0f0;
+}
+
+.panel h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  margin-top: 8px;
+  color: #c0d0e0;
+}
+
+.panel h3 small {
+  font-weight: 400;
+  color: #778899;
+  font-size: 12px;
+}
+
+.desc {
+  color: #778899;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+/* ── 업로드 박스 ── */
+.upload-box {
+  border: 2px dashed #3a4a5a;
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  margin-bottom: 16px;
+  transition: border-color 0.3s;
+}
+
+.upload-box:hover {
+  border-color: #5a7a9a;
+}
+
+.upload-label {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #8899aa;
+  font-size: 15px;
+}
+
+.upload-icon {
+  font-size: 48px;
+}
+
+.preview-img {
+  max-width: 100%;
+  max-height: 300px;
+  margin-top: 16px;
+  border-radius: 8px;
+  border: 1px solid #3a4a5a;
+}
+
+.status-text {
+  font-size: 13px;
+  color: #6ee7b7;
+  margin-bottom: 16px;
+}
+
+/* ── 폼 ── */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  color: #8899aa;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.form-group input[type="text"],
+.form-group input[type="date"],
+.form-group textarea {
+  width: 100%;
+  background: #0f1923;
+  border: 1px solid #2a3a4a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #e0e0e0;
+  font-size: 14px;
+  font-family: 'Noto Sans KR', sans-serif;
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+/* 그리드 레이아웃 */
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── 입력 테이블 (콘텐츠 유형) ── */
+.input-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.input-table th,
+.input-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #2a3a4a;
+}
+
+.input-table th {
+  font-size: 13px;
+  color: #8899aa;
+  font-weight: 500;
+}
+
+.input-table td strong {
+  color: #c0d0e0;
+  font-size: 14px;
+}
+
+.input-table input[type="text"] {
+  width: 100%;
+  background: #0f1923;
+  border: 1px solid #2a3a4a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e0e0e0;
+  font-size: 14px;
+  font-family: 'Noto Sans KR', sans-serif;
+}
+
+.input-table input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+/* ── 데이터 테이블 (Step 2, 미리보기) ── */
+.table-wrap {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+
+.table-wrap table,
+.preview-area table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table-wrap table th,
+.table-wrap table td,
+.preview-area table th,
+.preview-area table td {
+  padding: 8px 12px;
+  border: 1px solid #2a3a4a;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.table-wrap table th,
+.preview-area table th {
+  background: #253545;
+  color: #a0b8d0;
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.table-wrap table td,
+.preview-area table td {
+  color: #d0e0f0;
+}
+
+/* ── 배지 ── */
+.badge {
+  display: inline-block;
+  background: #1e3a5f;
+  color: #7cb3e0;
+  padding: 4px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  margin-right: 8px;
+}
+
+/* ── 버튼 ── */
+button {
+  font-family: 'Noto Sans KR', sans-serif;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 32px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: background 0.3s;
+}
+
+.btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.btn-download {
+  font-size: 17px;
+  padding: 14px 40px;
+}
+
+.nav-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+}
+
+.nav-buttons button:first-child {
+  background: #253545;
+  color: #8899aa;
+  border: 1px solid #3a4a5a;
+  border-radius: 10px;
+  padding: 10px 24px;
+  font-size: 14px;
+}
+
+.nav-buttons button:first-child:hover {
+  background: #2a4050;
+}
+
+/* ── 스피너 ── */
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #2a3a4a;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── 미리보기 영역 ── */
+.preview-area {
+  background: #fff;
+  color: #222;
+  border-radius: 12px;
+  padding: 32px;
+  min-height: 400px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.preview-area h2 {
+  color: #111;
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+.preview-area h3 {
+  color: #333;
+  font-size: 15px;
+  margin: 20px 0 10px;
+}
+
+.preview-area table th {
+  background: #d9e2f3;
+  color: #333;
+  border-color: #bbb;
+}
+
+.preview-area table td {
+  color: #333;
+  border-color: #bbb;
+}
+
+/* ── 토스트 ── */
+#toast {
+  display: none;
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  z-index: 9999;
+  font-size: 14px;
+  transition: opacity 0.3s;
+}
+
+/* ── 반응형 ── */
+@media (max-width: 600px) {
+  body {
+    padding: 10px;
+  }
+  .panel {
+    padding: 20px 16px;
+  }
+  .nav-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .nav-buttons button {
+    width: 100%;
+  }
+}
