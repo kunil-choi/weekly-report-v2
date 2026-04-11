@@ -1,7 +1,5 @@
-/* ── js/ocr.js  v7 ─────────────────────────────────────────── */
-/* 채널현황: v5 (정상 작동 확인 버전 그대로 복원)                  */
-/* 콘텐츠유형: v3 (완전 재작성)                                   */
-/* OCR 디버그 박스: 완전 제거                                     */
+/* ── js/ocr.js  v8 ─────────────────────────────────────────── */
+/* v7 대비 변경: CPM/RPM 통화 매칭 강화 + formatManPct 소수점 보정 */
 
 /* ── OCR 실행 ────────────────────────────────────────────── */
 function runOCR(img, statusEl, cb){
@@ -18,10 +16,10 @@ function runOCR(img, statusEl, cb){
 }
 
 /* ══════════════════════════════════════════════════════════════
-   채널현황 파서 v5 (정상 작동 — 그대로 복원)
+   채널현황 파서 v5.1 (CPM/RPM 통화 매칭 강화)
    ══════════════════════════════════════════════════════════════ */
 function parseChannelOCR(text){
-  console.log('[CH-OCR v5] raw:\n'+text);
+  console.log('[CH-OCR v5.1] raw:\n'+text);
   var lines=text.split(/\n/).map(function(l){return l.trim();}).filter(Boolean);
   var all=lines.join(' ');
 
@@ -33,35 +31,90 @@ function parseChannelOCR(text){
   var ctr=''; var mCtr=all.match(/([\d.]+)\s*%/);
   if(mCtr) ctr=mCtr[1]+'%';
 
-  /* 3) 통화값 ₩ */
-  var currPat=/[₩￦W＼]\s*([\d,]+(?:\.\d+)?)/g;
+  /* 3) 통화값 ₩ — 매칭 범위 확대 */
+  /* OCR이 ₩를 W, V, \\, ￦, ₩, \, ＼ 등으로 인식할 수 있음 */
+  var currPat=/[₩￦W＼\\V]\s*([\d,]+(?:\.\d+)?)/g;
   var cm, currNums=[];
   var currVals={};
+  var currRawPositions=[];  // 매칭 위치 기록
+
   while((cm=currPat.exec(all))){
     var cv=parseFloat(cm[1].replace(/,/g,''));
-    currNums.push(cv);
-    currVals[cv]=true;
+    if(cv > 0){
+      currNums.push(cv);
+      currVals[cv]=true;
+      currRawPositions.push({val:cv, pos:cm.index, raw:cm[0]});
+    }
   }
+
+  console.log('[CH-OCR v5.1] currency matches:', currRawPositions.map(function(x){return x.raw+'='+x.val;}));
+
+  /* W가 영단어 일부로 잡혔을 수 있으므로 필터링 */
+  /* 통화값은 보통 100 이상이므로 100 미만은 제거 */
+  currNums = currNums.filter(function(n){ return n >= 100; });
+  
+  /* 중복 제거 */
+  var seen = {};
+  currNums = currNums.filter(function(n){
+    if(seen[n]) return false;
+    seen[n] = true;
+    return true;
+  });
+
+  currVals = {};
+  currNums.forEach(function(n){ currVals[n]=true; });
+
   currNums.sort(function(a,b){return b-a;});
   var rev = currNums[0]||'';
   var cpm = currNums[1]||'';
   var rpm = currNums[2]||'';
-  console.log('[CH-OCR v5] currency nums:', currNums);
+  console.log('[CH-OCR v5.1] currency sorted: rev='+rev+', cpm='+cpm+', rpm='+rpm);
+
+  /* ── 통화가 3개 미만일 때 보완 로직 ── */
+  /* OCR이 ₩ 기호를 아예 누락하는 경우를 대비 */
+  if(currNums.length < 3){
+    console.log('[CH-OCR v5.1] currency < 3, trying fallback');
+    // 전체 숫자 중 통화가 아닌 것들을 모두 추출
+    var noTime=all.replace(/\d{1,2}:\d{2}/g,'__');
+    var noPct=noTime.replace(/([\d.]+)\s*%/g,'__');
+    // 통화 기호 주변 숫자도 제거하지 않고 전체에서 추출
+    var allNumPat=/([\d,]{3,}(?:\.\d+)?)/g;
+    var anm, allNums=[];
+    while((anm=allNumPat.exec(noPct))){
+      var av=parseFloat(anm[1].replace(/,/g,''));
+      if(av>0) allNums.push(av);
+    }
+    // 중복 제거 후 내림차순
+    var seenAll={};
+    allNums=allNums.filter(function(n){if(seenAll[n])return false;seenAll[n]=true;return true;});
+    allNums.sort(function(a,b){return b-a;});
+    console.log('[CH-OCR v5.1] all nums fallback:', allNums);
+
+    // 5개 이상 숫자가 있으면: 가장 큰 것 = rev, 그 다음 큰 것들 중 적절히 배분
+    // 일반적으로: views > rev > cpm > rpm > subs 순서
+    if(allNums.length >= 5){
+      // views가 가장 크고, 그 다음이 rev, 그 다음 cpm, rpm, subs
+      if(!rev) rev = allNums[1] || ''; // [0]=views, [1]=rev
+      if(!cpm) cpm = allNums[2] || '';
+      if(!rpm) rpm = allNums[3] || '';
+    }
+  }
 
   /* 4) 일반 숫자 (통화 제외) */
-  var noTime=all.replace(/\d{1,2}:\d{2}/g,'__');
-  var noPct=noTime.replace(/([\d.]+)\s*%/g,'__');
-  var noCurr=noPct.replace(/[₩￦W＼]\s*[\d,]+(?:\.\d+)?/g,'__');
-  var numPat=/([\d,]{2,})/g;
-  var nm, plainNums=[];
-  while((nm=numPat.exec(noCurr))){
-    var pv=parseFloat(nm[1].replace(/,/g,''));
+  var noTime2=all.replace(/\d{1,2}:\d{2}/g,'__');
+  var noPct2=noTime2.replace(/([\d.]+)\s*%/g,'__');
+  var noCurr2=noPct2.replace(/[₩￦W＼\\V]\s*[\d,]+(?:\.\d+)?/g,'__');
+  var numPat2=/([\d,]{2,})/g;
+  var nm2, plainNums=[];
+  while((nm2=numPat2.exec(noCurr2))){
+    var pv=parseFloat(nm2[1].replace(/,/g,''));
     if(pv>0 && !currVals[pv]) plainNums.push(pv);
   }
   plainNums.sort(function(a,b){return b-a;});
   var views=plainNums[0]||'';
   var subs =plainNums[1]||'';
-  console.log('[CH-OCR v5] plain nums:', plainNums);
+  console.log('[CH-OCR v5.1] plain nums:', plainNums);
+  console.log('[CH-OCR v5.1] FINAL → views='+views+', subs='+subs+', rev='+rev+', cpm='+cpm+', rpm='+rpm+', ctr='+ctr+', avg='+avg);
 
   /* 5) 값 세팅 */
   function fmt(n){return n?Number(n).toLocaleString():'';}
@@ -90,14 +143,17 @@ function fallbackFill(all){
   }
 }
 
-/* ── 숫자 포맷 (만 단위 + 퍼센트) ───────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   숫자 포맷 (만 단위 + 퍼센트) — 소수점 보정
+   ══════════════════════════════════════════════════════════════ */
 function formatManPct(numStr,pctStr){
   var n=parseFloat(String(numStr).replace(/,/g,''));
   if(isNaN(n)) return String(numStr)+(pctStr?'('+pctStr+')':'');
   var display;
   if(n>=10000){
     var man=n/10000;
-    display=(man%1===0?man.toFixed(0):man.toFixed(1))+'만';
+    // 항상 소수점 1자리 표시 (6.0만 → "6만" 방지, "6.0만"으로 표시)
+    display = man.toFixed(1) + '만';
   } else {
     display=n.toLocaleString();
   }
@@ -105,14 +161,13 @@ function formatManPct(numStr,pctStr){
 }
 
 /* ══════════════════════════════════════════════════════════════
-   콘텐츠 유형별 파서 v3 (완전 재작성)
+   콘텐츠 유형별 파서 v3 (변경 없음)
    ══════════════════════════════════════════════════════════════ */
 function parseContentOCR(text){
   console.log('[CT-OCR v3] raw:\n'+text);
 
   var lines=text.split(/\n/).map(function(l){return l.trim();}).filter(Boolean);
 
-  /* ── 동영상 / Shorts 행 찾기 ── */
   var videoLine='', shortsLine='';
   for(var i=0;i<lines.length;i++){
     var lo=lines[i].toLowerCase();
@@ -132,17 +187,11 @@ function parseContentOCR(text){
   console.log('[CT-OCR v3] videoLine:', videoLine);
   console.log('[CT-OCR v3] shortsLine:', shortsLine);
 
-  /* ── 행에서 숫자 + 퍼센트 추출 ── */
   function extractRow(line){
     if(!line) return {n1:'',p1:'',n2:'',p2:''};
-
-    // 키워드 제거
     var data=line.replace(/^.*?(동영상|[Ss]horts|쇼츠|[Vv]ideo)\s*/,'');
-
-    // 시간 형식 제거
     data=data.replace(/\d{1,2}:\d{2}(:\d{2})?/g,' ');
 
-    // 모든 토큰 추출
     var tokens=[];
     var re=/([\d,]+\.?\d*)\s*(%)?/g;
     var m;
@@ -150,10 +199,7 @@ function parseContentOCR(text){
       var val=m[1].replace(/,/g,'');
       var isPct=!!m[2];
       var numVal=parseFloat(val);
-
-      // 1자리 노이즈 제거
       if(val.length===1 && numVal<10 && !isPct) continue;
-
       tokens.push({raw:m[1], num:numVal, pct:isPct});
     }
     console.log('[CT-OCR v3] tokens:', JSON.stringify(tokens));
@@ -164,7 +210,6 @@ function parseContentOCR(text){
       else nums.push(tokens[j]);
     }
 
-    // 퍼센트 보정
     function fixPct(p){
       var v=parseFloat(p);
       if(isNaN(v)) return p;
@@ -186,14 +231,12 @@ function parseContentOCR(text){
   console.log('[CT-OCR v3] video parsed:', JSON.stringify(vr));
   console.log('[CT-OCR v3] shorts parsed:', JSON.stringify(sr));
 
-  /* ── 퍼센트 교차 보정 ── */
   function pVal(s){return parseFloat(String(s).replace('%',''))||0;}
   if(vr.p1 && !sr.p1) sr.p1=(100-pVal(vr.p1)).toFixed(1)+'%';
   if(sr.p1 && !vr.p1) vr.p1=(100-pVal(sr.p1)).toFixed(1)+'%';
   if(vr.p2 && !sr.p2) sr.p2=(100-pVal(vr.p2)).toFixed(1)+'%';
   if(sr.p2 && !vr.p2) vr.p2=(100-pVal(sr.p2)).toFixed(1)+'%';
 
-  /* ── 조회수 vs 시청시간 열 구분 ── */
   var vn1=parseFloat(String(vr.n1).replace(/,/g,''))||0;
   var vn2=parseFloat(String(vr.n2).replace(/,/g,''))||0;
   var viewFirst = !(vn2>0 && vn1>0 && vn2>vn1*10);
