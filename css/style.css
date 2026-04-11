@@ -49,7 +49,7 @@ label{font-size:14px;font-weight:500;color:#94a3b8;margin-bottom:4px;display:blo
 .date-ov label{color:#f59e0b}
 .nav-row{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
 .ocr-status{font-size:12px;color:#fbbf24;margin-top:8px;min-height:18px}
-@media(max-width:600px){.card{padding:18px}.main-title{font-size:22px}.tbl{font-size:12px}}
 .api-key-box{text-align:left;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:16px;margin-bottom:16px}
 .api-key-box label{color:#93c5fd;margin-bottom:8px}
 .api-key-box input[type="password"]{background:#0f1117;border:1px solid #334155;color:#e2e8f0}
+@media(max-width:600px){.card{padding:18px}.main-title{font-size:22px}.tbl{font-size:12px}}
