@@ -19,120 +19,252 @@ function runOCR(imageFile,statusElId,callback){
   });
 }
 
-/* ===== 채널 현황 OCR 파싱 v5.2 ===== */
-/* v5 기반, CPM/RPM 통화 매칭 강화, 디버그박스 제거 */
+/* ===== 채널 현황 OCR 파싱 v6 ===== */
+/* 키워드(라벨) 기반 파싱 → 패턴 기반 보완 이중 전략 */
 function parseChannelOCR(text){
-  console.log('=== parseChannelOCR v5.2 시작 ===');
+  console.log('=== parseChannelOCR v6 시작 ===');
 
+  var lines = text.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>0;});
   var fullText = text.replace(/\n/g, ' ');
 
-  /* 1) 시간 패턴 → ch_avg */
-  var avgVal = '';
-  var timeMatches = fullText.match(/\b\d{1,2}:\d{2}\b/g) || [];
-  if(timeMatches.length > 0) avgVal = timeMatches[0];
+  for(var i=0;i<lines.length;i++) console.log('LINE'+i+': ['+lines[i]+']');
 
-  /* 2) 백분율 패턴 → ch_ctr */
-  var ctrVal = '';
-  var pm = fullText.match(/([\d.]+)\s*%/);
-  if(pm) ctrVal = pm[1] + '%';
+  var R = {views:'', subs:'', rev:'', cpm:'', rpm:'', ctr:'', avg:''};
 
-  /* 3) 통화(₩) 숫자 추출 → 수익, CPM, RPM */
-  /* OCR이 ₩를 W, V, \\, ￦ 등으로 인식할 수 있으므로 패턴 확장 */
-  var currencyNums = [];
-  var currRe = /[₩￦WV＼\\][^\d]*([\d,]+(?:\.\d+)?)/g;
-  var cm;
-  while((cm = currRe.exec(fullText)) !== null){
-    var val = parseFloat(cm[1].replace(/,/g,''));
-    if(!isNaN(val) && val >= 100) currencyNums.push({num: cm[1], val: val, raw: cm[0]});
+  /* ── 헬퍼 함수들 ── */
+
+  /* 문자열에서 첫 번째 통화 숫자 추출 (₩, ￦ 우선, 그 다음 일반 큰 숫자) */
+  function grabCurrency(str){
+    var m = str.match(/[₩￦＼]\s*([\d,]+(?:\.\d+)?)/);
+    if(m) return m[1];
+    /* W가 단어 일부가 아닌 경우만 (W 앞이 알파벳이 아닌 경우) */
+    m = str.match(/(?:^|[^a-zA-Z])W([\d,]+(?:\.\d+)?)/);
+    if(m) return m[1];
+    /* \숫자 */
+    m = str.match(/\\([\d,]+(?:\.\d+)?)/);
+    if(m) return m[1];
+    /* 통화기호 없이 숫자만 있는 경우 */
+    m = str.match(/([\d,]{3,}(?:\.\d+)?)/);
+    if(m) return m[1];
+    return '';
   }
 
-  /* 중복 제거 */
-  var seenCurr = {};
-  currencyNums = currencyNums.filter(function(c){
-    if(seenCurr[c.val]) return false;
-    seenCurr[c.val] = true;
-    return true;
-  });
-
-  currencyNums.sort(function(a,b){return b.val - a.val});
-
-  /* 통화값 맵 (일반숫자에서 제외용) */
-  var currVals = {};
-  for(var ci=0; ci<currencyNums.length; ci++){
-    currVals[currencyNums[ci].val] = true;
+  /* 문자열에서 첫 번째 일반 숫자 추출 (+/- 부호 포함) */
+  function grabNumber(str){
+    var m = str.match(/([+\-])?\s*([\d,]+(?:\.\d+)?)/);
+    if(!m) return '';
+    var sign = m[1] || '';
+    return sign + m[2];
   }
 
-  var revVal='', cpmVal='', rpmVal='';
-  if(currencyNums.length >= 3){
-    revVal = currencyNums[0].num;
-    cpmVal = currencyNums[1].num;
-    rpmVal = currencyNums[2].num;
-  } else if(currencyNums.length === 2){
-    cpmVal = currencyNums[0].num;
-    rpmVal = currencyNums[1].num;
-  } else if(currencyNums.length === 1){
-    revVal = currencyNums[0].num;
+  /* 퍼센트 추출 */
+  function grabPercent(str){
+    var m = str.match(/([\d.]+)\s*%/);
+    return m ? m[1]+'%' : '';
   }
 
-  console.log('통화 매칭:', currencyNums.map(function(c){return c.raw+'→'+c.num+'('+c.val+')'}).join(' | '));
-
-  /* 4) 일반 숫자 추출: 시간, %, 통화 숫자를 모두 제외 */
-  var cleanText = fullText;
-  cleanText = cleanText.replace(/\b\d{1,2}:\d{2}\b/g, ' ');
-  cleanText = cleanText.replace(/[\d.]+\s*%/g, ' ');
-
-  var allNums = [];
-  var numRe = /\b([\d,]{2,}(?:\.\d+)?)\b/g;
-  var nm;
-  while((nm = numRe.exec(cleanText)) !== null){
-    var numStr = nm[1];
-    var numVal = parseFloat(numStr.replace(/,/g,''));
-    if(isNaN(numVal) || numVal <= 0) continue;
-    if(currVals[numVal]) continue;
-    allNums.push({raw: numStr, val: numVal});
-  }
-  allNums.sort(function(a,b){return b.val - a.val});
-
-  console.log('일반숫자(통화제외):', allNums.map(function(n){return n.raw+'('+n.val+')'}).join(', '));
-
-  /* 5) 조회수, 구독자 매칭 */
-  var viewsVal='', subsVal='';
-  if(allNums.length >= 2){
-    viewsVal = allNums[0].raw;
-    subsVal = allNums[1].raw;
-  } else if(allNums.length === 1){
-    viewsVal = allNums[0].raw;
+  /* 시간(mm:ss) 추출 */
+  function grabTime(str){
+    var m = str.match(/(\d{1,2}:\d{2})/);
+    return m ? m[1] : '';
   }
 
-  /* ₩ 미인식 fallback: 통화 0개이고 일반숫자 5개 이상 */
-  if(currencyNums.length === 0 && allNums.length >= 5){
-    revVal = allNums[0].raw;
-    viewsVal = allNums[1].raw;
-    cpmVal = allNums[2].raw;
-    subsVal = allNums[3].raw;
-    rpmVal = allNums[4].raw;
-  }
+  /* ──────────────────────────────────────────
+     방법 A: 키워드(라벨) 근처에서 값을 찾기
+     YouTube Analytics의 라벨은 값의 바로 위 또는 같은 줄에 있음
+     ────────────────────────────────────────── */
 
-  /* 통화 2개만 잡혔고 일반숫자 3개 이상이면 가장 큰 일반숫자가 수익일 수 있음 */
-  if(currencyNums.length === 2 && !revVal && allNums.length >= 1){
-    /* 가장 큰 일반숫자가 CPM보다 훨씬 크면 수익으로 간주 */
-    if(allNums[0].val > currencyNums[0].val * 10){
-      revVal = allNums[0].raw;
-      viewsVal = allNums.length >= 2 ? allNums[1].raw : '';
-      subsVal = allNums.length >= 3 ? allNums[2].raw : '';
+  /* 라인 인덱스 기반 검색: 키워드가 있는 라인 + 다음 라인에서 값 추출 */
+  var fullLower = fullText.toLowerCase();
+
+  /* 키워드 → 필드 매핑 (우선순위 순) */
+  var kwDefs = [
+    {field:'avg',  kws:['평균 시청 지속 시간','평균시청지속시간','평균 시청 지속시간','시청 지속 시간','average view duration','view duration'], extract: grabTime},
+    {field:'ctr',  kws:['노출 클릭률','노출클릭률','클릭률','impressions click-through','click-through rate','ctr'], extract: grabPercent},
+    {field:'rev',  kws:['예상 수익','예상수익','estimated revenue'], extract: grabCurrency},
+    {field:'cpm',  kws:['재생 기반 cpm','재생기반 cpm','재생 기반cpm','playback-based cpm','playback based cpm'], extract: grabCurrency},
+    {field:'rpm',  kws:['rpm'], extract: grabCurrency},
+    {field:'views',kws:['조회수','조회 수'], extract: grabNumber},
+    {field:'subs', kws:['구독자','구독 자','subscribers'], extract: grabNumber}
+  ];
+
+  /* 라인 단위 검색 */
+  for(var ki=0; ki<kwDefs.length; ki++){
+    var def = kwDefs[ki];
+    if(R[def.field]) continue;
+
+    for(var kwi=0; kwi<def.kws.length; kwi++){
+      if(R[def.field]) break;
+      var kw = def.kws[kwi].toLowerCase();
+
+      for(var li=0; li<lines.length; li++){
+        if(R[def.field]) break;
+        var lineLower = lines[li].toLowerCase();
+        var kwPos = lineLower.indexOf(kw);
+        if(kwPos === -1) continue;
+
+        /* 같은 줄에서 키워드 뒤의 텍스트 검색 */
+        var afterKw = lines[li].substring(kwPos + kw.length);
+        var val = def.extract(afterKw);
+
+        /* 같은 줄에 없으면 다음 줄 검색 */
+        if(!val && li+1 < lines.length){
+          val = def.extract(lines[li+1]);
+        }
+
+        /* RPM 특수 처리: CPM과 같은 줄에 있을 때 두 번째 통화값 */
+        if(def.field === 'rpm' && !val){
+          /* fullText에서 RPM 키워드 뒤 검색 */
+          var rpmIdx = fullLower.indexOf('rpm');
+          if(rpmIdx > -1){
+            var afterRpm = fullText.substring(rpmIdx + 3, rpmIdx + 60);
+            val = grabCurrency(afterRpm);
+          }
+        }
+
+        if(val){
+          R[def.field] = val;
+          console.log('A: '+def.field+' = "'+val+'" (키워드: "'+def.kws[kwi]+'" @ line '+li+')');
+        }
+      }
     }
   }
 
-  /* 6) 결과 적용 */
-  if(avgVal)   setV('ch_avg', avgVal);
-  if(ctrVal)   setV('ch_ctr', ctrVal);
-  if(viewsVal) setV('ch_views', viewsVal);
-  if(subsVal)  setV('ch_subs', cleanChannelValue(subsVal, 'ch_subs'));
-  if(revVal)   setV('ch_rev', revVal);
-  if(cpmVal)   setV('ch_cpm', cpmVal);
-  if(rpmVal)   setV('ch_rpm', rpmVal);
+  /* fullText 기반 보완 (라인 단위에서 못 찾은 경우) */
+  for(var ki=0; ki<kwDefs.length; ki++){
+    var def = kwDefs[ki];
+    if(R[def.field]) continue;
 
-  console.log('v5.2 최종: views='+viewsVal+', subs='+subsVal+', rev='+revVal+', cpm='+cpmVal+', rpm='+rpmVal+', ctr='+ctrVal+', avg='+avgVal);
+    for(var kwi=0; kwi<def.kws.length; kwi++){
+      if(R[def.field]) break;
+      var kw = def.kws[kwi].toLowerCase();
+      var idx = fullLower.indexOf(kw);
+      if(idx === -1) continue;
+
+      var after = fullText.substring(idx + kw.length, idx + kw.length + 80);
+      var val = def.extract(after);
+      if(val){
+        R[def.field] = val;
+        console.log('A(full): '+def.field+' = "'+val+'" (키워드: "'+def.kws[kwi]+'")');
+      }
+    }
+  }
+
+  console.log('방법A 결과:', JSON.stringify(R));
+
+  /* ──────────────────────────────────────────
+     방법 B: 패턴 기반 보완 (비어있는 필드만 채움)
+     ────────────────────────────────────────── */
+
+  /* B-1) 시간 → avg */
+  if(!R.avg){
+    var tm = fullText.match(/\b(\d{1,2}:\d{2})\b/g);
+    if(tm && tm.length) R.avg = tm[0];
+  }
+
+  /* B-2) 퍼센트 → ctr */
+  if(!R.ctr){
+    var pm = fullText.match(/([\d.]+)\s*%/);
+    if(pm) R.ctr = pm[1]+'%';
+  }
+
+  /* B-3) 통화 숫자 → rev, cpm, rpm */
+  if(!R.rev || !R.cpm || !R.rpm){
+    var currNums = [];
+    var currRe = /[₩￦]\s*([\d,]+(?:\.\d+)?)/g;
+    var cm;
+    while((cm = currRe.exec(fullText)) !== null){
+      var v = parseFloat(cm[1].replace(/,/g,''));
+      if(!isNaN(v) && v >= 100) currNums.push({num:cm[1], val:v});
+    }
+    /* 비단어 W + 숫자 */
+    var currRe2 = /(?:^|[^a-zA-Z])W([\d,]+(?:\.\d+)?)/g;
+    while((cm = currRe2.exec(fullText)) !== null){
+      var v = parseFloat(cm[1].replace(/,/g,''));
+      if(!isNaN(v) && v >= 100){
+        var dup = false;
+        for(var d=0;d<currNums.length;d++) if(currNums[d].val===v){dup=true;break;}
+        if(!dup) currNums.push({num:cm[1], val:v});
+      }
+    }
+    currNums.sort(function(a,b){return b.val - a.val;});
+    /* 이미 할당된 값 제외 */
+    var usedC = {};
+    if(R.rev) usedC[parseFloat(R.rev.replace(/,/g,''))] = true;
+    if(R.cpm) usedC[parseFloat(R.cpm.replace(/,/g,''))] = true;
+    if(R.rpm) usedC[parseFloat(R.rpm.replace(/,/g,''))] = true;
+    currNums = currNums.filter(function(c){return !usedC[c.val];});
+
+    console.log('통화B:', currNums.map(function(c){return c.num}).join(', '));
+
+    var ci = 0;
+    if(!R.rev && currNums[ci]){R.rev = currNums[ci].num; ci++;}
+    if(!R.cpm && currNums[ci]){R.cpm = currNums[ci].num; ci++;}
+    if(!R.rpm && currNums[ci]){R.rpm = currNums[ci].num; ci++;}
+  }
+
+  /* B-4) 일반 숫자 → views, subs */
+  if(!R.views || !R.subs){
+    var usedVals = {};
+    ['rev','cpm','rpm','views','subs'].forEach(function(f){
+      if(R[f]){
+        var nv = parseFloat(R[f].replace(/[+\-,]/g,''));
+        if(!isNaN(nv)) usedVals[nv] = true;
+      }
+    });
+
+    /* 통화·시간·퍼센트를 제거한 텍스트에서 숫자 추출 */
+    var ct = fullText;
+    ct = ct.replace(/\d{1,2}:\d{2}/g,' ');
+    ct = ct.replace(/[\d.]+\s*%/g,' ');
+    ct = ct.replace(/[₩￦＼]\s*[\d,]+(?:\.\d+)?/g,' ');
+    ct = ct.replace(/(?:^|[^a-zA-Z])W[\d,]+/g,' ');
+    ct = ct.replace(/\\[\d,]+/g,' ');
+
+    var nums = [];
+    var nRe = /([+\-])?\s*([\d,]{2,}(?:\.\d+)?)/g;
+    var nm;
+    while((nm = nRe.exec(ct)) !== null){
+      var raw = nm[2];
+      var nv = parseFloat(raw.replace(/,/g,''));
+      if(isNaN(nv) || nv <= 0) continue;
+      if(usedVals[nv]) continue;
+      var signed = !!nm[1];
+      nums.push({raw:raw, val:nv, signed:signed, sign:nm[1]||''});
+    }
+
+    /* 구독자: +/- 부호가 있는 숫자 */
+    if(!R.subs){
+      var signedArr = nums.filter(function(n){return n.signed;});
+      if(signedArr.length){
+        R.subs = signedArr[0].sign + signedArr[0].raw;
+        usedVals[signedArr[0].val] = true;
+      }
+    }
+    /* 조회수: 부호 없는 가장 큰 숫자 */
+    if(!R.views){
+      var unsigned = nums.filter(function(n){return !n.signed && !usedVals[n.val];});
+      unsigned.sort(function(a,b){return b.val - a.val;});
+      if(unsigned.length) R.views = unsigned[0].raw;
+    }
+    /* 구독자 fallback: 부호 없는 두 번째 큰 숫자 */
+    if(!R.subs){
+      var unsigned2 = nums.filter(function(n){return !usedVals[n.val];});
+      unsigned2.sort(function(a,b){return b.val - a.val;});
+      if(unsigned2.length >= 2) R.subs = unsigned2[1].raw;
+    }
+  }
+
+  console.log('v6 최종:', JSON.stringify(R));
+
+  /* ── 결과 적용 ── */
+  if(R.views) setV('ch_views', R.views);
+  if(R.subs)  setV('ch_subs', cleanChannelValue(R.subs, 'ch_subs'));
+  if(R.rev)   setV('ch_rev', R.rev);
+  if(R.cpm)   setV('ch_cpm', R.cpm);
+  if(R.rpm)   setV('ch_rpm', R.rpm);
+  if(R.ctr)   setV('ch_ctr', R.ctr);
+  if(R.avg)   setV('ch_avg', R.avg);
 }
 
 /* 채널 값 정리 */
@@ -149,13 +281,7 @@ function cleanChannelValue(val, fieldId){
   return v;
 }
 
-/* 빈 필드 보충 */
-function fallbackFill(lines){
-  var fullText = lines.join(' ');
-  if(!V('ch_avg')){var tm=fullText.match(/\d{1,2}:\d{2}/);if(tm)setV('ch_avg',tm[0]);}
-}
-
-/* ===== 콘텐츠 유형: 만 단위 변환 (소수점 보정) ===== */
+/* ===== 콘텐츠 유형: 만 단위 변환 ===== */
 function formatManPct(numStr, pctStr){
   var n = parseFloat((numStr||'').replace(/,/g,''));
   var p = parseFloat((pctStr||'').replace(/[()%]/g,'').trim());
@@ -163,7 +289,6 @@ function formatManPct(numStr, pctStr){
   var manStr;
   if(n >= 10000){
     var man = n / 10000;
-    /* 항상 소수점 1자리 표시 (59591.6 → 6.0만, 326262 → 32.6만) */
     manStr = man.toFixed(1) + '만';
   } else if(n >= 1000){
     manStr = commaNum(Math.round(n));
@@ -179,7 +304,6 @@ function parseContentOCR(text){
   var lines = text.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>0;});
   for(var i=0;i<lines.length;i++) console.log('CL'+i+':',lines[i]);
 
-  /* 동영상 / Shorts 행 찾기 */
   var videoLine='', shortsLine='';
   for(var i=0;i<lines.length;i++){
     var lo=lines[i].toLowerCase();
@@ -200,12 +324,9 @@ function parseContentOCR(text){
   console.log('videoLine:', videoLine);
   console.log('shortsLine:', shortsLine);
 
-  /* 행에서 숫자+퍼센트 추출 */
   function extractRow(line){
     if(!line) return {n1:'',p1:'',n2:'',p2:''};
-
     var data=line.replace(/^.*?(동영상|[Ss]horts|쇼츠)/,'');
-    /* 시간 형식 제거 */
     data=data.replace(/\d{1,2}:\d{2}(:\d{2})?/g,' ');
 
     var tokens=[];
@@ -215,7 +336,6 @@ function parseContentOCR(text){
       var val=m[1].replace(/,/g,'');
       var isPct=!!m[2];
       var numVal=parseFloat(val);
-      /* 1자리 노이즈 제거 (£1, [J 등에서 나온 1) */
       if(val.length===1 && numVal<10 && !isPct) continue;
       tokens.push({raw:m[1], num:numVal, pct:isPct});
     }
@@ -244,18 +364,15 @@ function parseContentOCR(text){
 
   var vr=extractRow(videoLine);
   var sr=extractRow(shortsLine);
-
   console.log('video parsed:', JSON.stringify(vr));
   console.log('shorts parsed:', JSON.stringify(sr));
 
-  /* 퍼센트 교차 보정 */
   function pVal(s){return parseFloat(s)||0;}
   if(vr.p1 && !sr.p1 && pVal(vr.p1)>0) sr.p1=String(Math.round((100-pVal(vr.p1))*10)/10);
   if(sr.p1 && !vr.p1 && pVal(sr.p1)>0) vr.p1=String(Math.round((100-pVal(sr.p1))*10)/10);
   if(vr.p2 && !sr.p2 && pVal(vr.p2)>0) sr.p2=String(Math.round((100-pVal(vr.p2))*10)/10);
   if(sr.p2 && !vr.p2 && pVal(sr.p2)>0) vr.p2=String(Math.round((100-pVal(sr.p2))*10)/10);
 
-  /* 합이 ~100이 되도록 보정 */
   if(vr.p1 && sr.p1){
     var sum1=pVal(vr.p1)+pVal(sr.p1);
     if(sum1>=900 && sum1<=1100){vr.p1=String(Math.round(pVal(vr.p1)/10*10)/10);sr.p1=String(Math.round(pVal(sr.p1)/10*10)/10);}
@@ -265,7 +382,6 @@ function parseContentOCR(text){
     if(sum2>=900 && sum2<=1100){vr.p2=String(Math.round(pVal(vr.p2)/10*10)/10);sr.p2=String(Math.round(pVal(sr.p2)/10*10)/10);}
   }
 
-  /* 열 순서 판단 */
   var colOrder='views_first';
   for(var i=0;i<lines.length;i++){
     if(/조회\s*수/.test(lines[i])&&/시청/.test(lines[i])){
@@ -286,13 +402,11 @@ function parseContentOCR(text){
   }
 }
 
-/* ===== 이미지 업로드 핸들러 (재업로드 시 기존 데이터 초기화) ===== */
+/* ===== 이미지 업로드 핸들러 ===== */
 document.getElementById('chImg').addEventListener('change',function(e){
   var f=e.target.files[0];if(!f)return;
   var img=document.getElementById('chImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden');
   ['ch_views','ch_subs','ch_rev','ch_cpm','ch_rpm','ch_ctr','ch_avg'].forEach(function(id){setV(id,'');});
-  /* 기존 디버그 박스 제거 */
-  var oldDbg=document.querySelector('#step3 .ocr-debug');if(oldDbg)oldDbg.remove();
   document.getElementById('chOcrStatus').textContent='';
   document.getElementById('chOcrStatus').style.color='#fbbf24';
   runOCR(f,'chOcrStatus',parseChannelOCR);
@@ -301,7 +415,6 @@ document.getElementById('ctImg').addEventListener('change',function(e){
   var f=e.target.files[0];if(!f)return;
   var img=document.getElementById('ctImgP');img.src=URL.createObjectURL(f);img.classList.remove('hidden');
   ['ct_vv','ct_vw','ct_sv','ct_sw'].forEach(function(id){setV(id,'');});
-  var oldDbg=document.querySelector('#step4 .ocr-debug');if(oldDbg)oldDbg.remove();
   document.getElementById('ctOcrStatus').textContent='';
   document.getElementById('ctOcrStatus').style.color='#fbbf24';
   runOCR(f,'ctOcrStatus',parseContentOCR);
