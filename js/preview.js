@@ -1,4 +1,4 @@
-/* ===== [수정3] 보고서 제목 자동 생성 ===== */
+/* ===== 보고서 제목 자동 생성 ===== */
 function getReportTitle(){
   var year,month,week;
   if(S.prevWeekNum){
@@ -30,41 +30,26 @@ function buildPreview(){
 
   h+='<h3>■ '+title+'</h3>';
 
-  /* ===== 지난주 실적 테이블 ===== */
-  /* [수정1] 지난주: 녹화+특이사항+조회수만 표시 (업로드 제외) */
-  h+='<h4 style="color:#818cf8;margin:14px 0 6px"><span class="wl last">지난주</span> '+lwRange+'</h4>';
-  h+='<table class="tbl" id="t1a"><tr><th>날짜</th><th>스튜디오 녹화 일정</th><th>특이사항</th><th>조회수</th></tr>';
+  /* ===== 지난주 실적: 유튜브 업로드 콘텐츠 + 조회수 ===== */
+  h+='<h4 style="color:#818cf8;margin:14px 0 6px">▸ 지난주 실적 ('+lwRange+')</h4>';
+  h+='<table class="tbl" id="t1a"><tr><th>날짜</th><th>유튜브 업로드 콘텐츠</th><th>조회수</th></tr>';
   var lwD=daysIn(S.lws,S.lwe);
   for(var di=0;di<lwD.length;di++){
     var d=lwD[di];var dateLabel=fmtShort(d)+'('+DK[d.getDay()]+')';
-    var sch=S.lastSch.filter(function(r){return sameDay(r._date,d)});
-    var record='-', noteVal='-', views='-';
-    if(sch.length){
-      var records=[], notes=[];
-      for(var si=0;si<sch.length;si++){
-        if(sch[si].studioRecordClean) records.push(sch[si].studioRecordClean);
-        if(sch[si].note) notes.push(sch[si].note);
-      }
-      record=records.length?records.join(', '):'-';
-      noteVal=notes.length?notes.join(', '):'-';
-    }
-    if(record==='-' && S._prevSchedule && S._prevSchedule.length){
-      for(var pi=0;pi<S._prevSchedule.length;pi++){
-        var ps=S._prevSchedule[pi];
-        if(ps.date && ps.date.indexOf((d.getMonth()+1)+'/'+d.getDate())>-1){
-          if(ps.rec) record=ps.rec;
-          if(ps.note) noteVal=ps.note;
-        }
-      }
-    }
     var vid=S.yt.filter(function(v){return sameDay(v._date,d)});
-    if(vid.length) views=Number(vid[0].views).toLocaleString();
-    h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+record+'</td><td contenteditable="true">'+noteVal+'</td><td contenteditable="true">'+views+'</td></tr>';
+    var ytTitle='-', views='-';
+    if(vid.length){
+      ytTitle=vid.map(function(v){return v.title}).join(', ');
+      var totalViews=0;
+      for(var vi=0;vi<vid.length;vi++) totalViews+=Number(vid[vi].views)||0;
+      views=totalViews.toLocaleString();
+    }
+    h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+ytTitle+'</td><td contenteditable="true">'+views+'</td></tr>';
   }
   h+='</table>';
 
-  /* ===== 이번주 계획 테이블 ===== */
-  h+='<h4 style="color:#34d399;margin:14px 0 6px"><span class="wl this">이번주</span> '+twRange+'</h4>';
+  /* ===== 이번주 계획 ===== */
+  h+='<h4 style="color:#34d399;margin:14px 0 6px">▸ 이번주 계획 ('+twRange+')</h4>';
   h+='<table class="tbl" id="t1b"><tr><th>날짜</th><th>업로드 및 예정 아이템</th><th>스튜디오 녹화 일정</th><th>특이사항</th></tr>';
   var twD=daysIn(S.tws,S.twe);
   for(var di=0;di<twD.length;di++){
@@ -75,7 +60,6 @@ function buildPreview(){
       var uploads=[],records=[],notes=[];
       for(var si=0;si<sch.length;si++){
         if(sch[si].uploadItem) uploads.push(sch[si].uploadItem);
-        /* 녹화: studioRecordClean 사용 (이미 "시간 출연자, 시간 출연자" 형태) */
         if(sch[si].studioRecordClean) records.push(sch[si].studioRecordClean);
         if(sch[si].note) notes.push(sch[si].note);
       }
@@ -87,20 +71,24 @@ function buildPreview(){
   }
   h+='</table>';
 
-  /* ===== 채널 현황 ===== */
+  /* ===== 채널 현황 (이미지와 동일한 가로 8열) ===== */
   h+='<h3>■ 채널 현황 ('+lwRange+')</h3>';
   h+='<table class="tbl" id="t2"><tr><th></th><th>조회수</th><th>구독자</th><th>예상 수익</th><th>재생 기반 CPM</th><th>RPM</th><th>노출 클릭률</th><th>평균 시청 지속 시간</th></tr>';
-  h+='<tr><td><b>지난주</b></td><td contenteditable="true">'+(S.ch.views||'')+'</td><td contenteditable="true">'+(S.ch.subs||'')+'</td><td contenteditable="true">'+(S.ch.rev||'')+'</td><td contenteditable="true">'+(S.ch.cpm||'')+'</td><td contenteditable="true">'+(S.ch.rpm||'')+'</td><td contenteditable="true">'+(S.ch.ctr||'')+'</td><td contenteditable="true">'+(S.ch.avg||'')+'</td></tr>';
-  h+='<tr><td><b>지지난주</b></td><td contenteditable="true">'+(S.ch2.views||'')+'</td><td contenteditable="true">'+(S.ch2.subs||'')+'</td><td contenteditable="true">'+(S.ch2.rev||'')+'</td><td contenteditable="true">'+(S.ch2.cpm||'')+'</td><td contenteditable="true">'+(S.ch2.rpm||'')+'</td><td contenteditable="true">'+(S.ch2.ctr||'')+'</td><td contenteditable="true">'+(S.ch2.avg||'')+'</td></tr>';
+  h+='<tr><td><b>'+lwRange+'</b></td><td contenteditable="true">'+(S.ch.views||'')+'</td><td contenteditable="true">'+(S.ch.subs||'')+'</td><td contenteditable="true">'+(S.ch.rev||'')+'</td><td contenteditable="true">'+(S.ch.cpm||'')+'</td><td contenteditable="true">'+(S.ch.rpm||'')+'</td><td contenteditable="true">'+(S.ch.ctr||'')+'</td><td contenteditable="true">'+(S.ch.avg||'')+'</td></tr>';
+  /* 지지난주 날짜 범위 계산 */
+  var ppws=new Date(S.lws);ppws.setDate(ppws.getDate()-7);
+  var ppwe=new Date(S.lws);ppwe.setDate(ppwe.getDate()-1);
+  var ppRange=fmtShort(ppws)+'~'+fmtShort(ppwe);
+  h+='<tr><td><b>'+ppRange+'</b></td><td contenteditable="true">'+(S.ch2.views||'')+'</td><td contenteditable="true">'+(S.ch2.subs||'')+'</td><td contenteditable="true">'+(S.ch2.rev||'')+'</td><td contenteditable="true">'+(S.ch2.cpm||'')+'</td><td contenteditable="true">'+(S.ch2.rpm||'')+'</td><td contenteditable="true">'+(S.ch2.ctr||'')+'</td><td contenteditable="true">'+(S.ch2.avg||'')+'</td></tr>';
   h+='</table>';
 
-  /* ===== 콘텐츠 유형 ===== */
+  /* ===== 콘텐츠 유형별 (이미지와 동일한 4열) ===== */
   h+='<h3>■ 콘텐츠 유형별 ('+lwRange+')</h3>';
-  h+='<table class="tbl" id="t3"><tr><th></th><th>조회수</th><th>시청 시간</th></tr>';
-  h+='<tr><td><b>지난주 동영상</b></td><td contenteditable="true">'+(S.ct.vv||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+'</td></tr>';
-  h+='<tr><td><b>지난주 Shorts</b></td><td contenteditable="true">'+(S.ct.sv||'')+'</td><td contenteditable="true">'+(S.ct.sw||'')+'</td></tr>';
-  h+='<tr><td><b>지지난주 동영상</b></td><td contenteditable="true">'+(S.ct2.vv||'')+'</td><td contenteditable="true">'+(S.ct2.vw||'')+'</td></tr>';
-  h+='<tr><td><b>지지난주 Shorts</b></td><td contenteditable="true">'+(S.ct2.sv||'')+'</td><td contenteditable="true">'+(S.ct2.sw||'')+'</td></tr>';
+  h+='<table class="tbl" id="t3"><tr><th></th><th></th><th>조회수</th><th>시청 시간</th></tr>';
+  h+='<tr><td rowspan="2"><b>'+lwRange+'</b></td><td>동영상</td><td contenteditable="true">'+(S.ct.vv||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+'</td></tr>';
+  h+='<tr><td>Shorts</td><td contenteditable="true">'+(S.ct.sv||'')+'</td><td contenteditable="true">'+(S.ct.sw||'')+'</td></tr>';
+  h+='<tr><td rowspan="2"><b>'+ppRange+'</b></td><td>동영상</td><td contenteditable="true">'+(S.ct2.vv||'')+'</td><td contenteditable="true">'+(S.ct2.vw||'')+'</td></tr>';
+  h+='<tr><td>Shorts</td><td contenteditable="true">'+(S.ct2.sv||'')+'</td><td contenteditable="true">'+(S.ct2.sw||'')+'</td></tr>';
   h+='</table>';
 
   /* ===== 구독자 & 메모 ===== */
