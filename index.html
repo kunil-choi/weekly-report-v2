@@ -1,153 +1,139 @@
-/* ===== Gemini API Key 관리 ===== */
-(function(){
-  var saved = localStorage.getItem('gemini_api_key') || '';
-  var inp = document.getElementById('geminiKey');
-  var st  = document.getElementById('keyStatus');
-  if(saved){
-    inp.value = saved;
-    st.textContent = '✅ 저장된 키가 있습니다.';
-    st.style.color = '#34d399';
-  }
-  document.getElementById('btnSaveKey').addEventListener('click', function(){
-    var k = inp.value.trim();
-    if(!k){ st.textContent = '❌ 키를 입력하세요.'; st.style.color = '#f87171'; return; }
-    localStorage.setItem('gemini_api_key', k);
-    st.textContent = '✅ 저장되었습니다.';
-    st.style.color = '#34d399';
-    toast('API Key 저장됨','success');
-  });
-})();
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>머니올라 주간 보고서 생성기</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="toast-container"></div>
+<div class="progress-bar">
+<div class="step-ind active" data-s="1">① 시작</div>
+<div class="step-ind" data-s="2">② 수집</div>
+<div class="step-ind" data-s="3">③ 채널현황</div>
+<div class="step-ind" data-s="4">④ 콘텐츠유형</div>
+<div class="step-ind" data-s="5">⑤ 구독자·메모</div>
+<div class="step-ind" data-s="6">⑥ 미리보기</div>
+</div>
+<div class="container">
 
-function getGeminiKey(){
-  return (document.getElementById('geminiKey').value || localStorage.getItem('gemini_api_key') || '').trim();
-}
+<!-- STEP 1 -->
+<div class="panel active" id="step1"><div class="card tc">
+<div class="main-title">머니올라 주간 보고서 생성기</div>
+<p class="main-sub">매주 화요일, 지난주 실적과 이번주 계획을 자동 정리합니다.</p>
 
-/* ===== 이미지 → Base64 변환 ===== */
-function fileToBase64(file, callback){
-  var reader = new FileReader();
-  reader.onload = function(e){
-    var dataUrl = e.target.result;           // "data:image/png;base64,AAAA..."
-    var base64 = dataUrl.split(',')[1];      // "AAAA..."
-    var mimeType = dataUrl.split(';')[0].split(':')[1]; // "image/png"
-    callback(base64, mimeType);
-  };
-  reader.readAsDataURL(file);
-}
+<!-- Gemini API Key -->
+<div class="api-key-box">
+<label>🔑 Gemini API Key <span class="ts tm">(<a href="https://aistudio.google.com/apikey" target="_blank" style="color:#60a5fa">무료 발급</a>)</span></label>
+<div class="flex g2" style="align-items:center">
+<input type="password" id="geminiKey" placeholder="AIza..." style="flex:1">
+<button class="btn btn-s" id="btnSaveKey" style="white-space:nowrap">저장</button>
+</div>
+<p class="ts tm mt2" id="keyStatus"></p>
+</div>
 
-/* ===== Gemini Vision API 호출 ===== */
-function callGemini(base64, mimeType, prompt, statusElId, callback){
-  var key = getGeminiKey();
-  if(!key){
-    var el = document.getElementById(statusElId);
-    if(el){ el.textContent = '❌ Gemini API Key를 먼저 입력하세요 (Step 1).'; el.style.color = '#f87171'; }
-    toast('API Key가 없습니다. Step 1에서 입력하세요.','error');
-    return;
-  }
+<div class="upload-area mt3"><div style="font-size:40px">📄</div><div style="color:#94a3b8">지난주 보고서(.docx) 업로드 → 지지난주 데이터 자동 추출</div><div id="fn1" style="color:#3b82f6;font-weight:600;margin-top:8px"></div><input type="file" accept=".docx" id="fi1"></div>
+<div id="prevDocStatus" class="ocr-status tc"></div>
+<div class="date-ov mt3"><label>📅 기준 날짜 수동 지정 (선택)</label><input type="date" id="manDate" class="mt2" style="max-width:220px"><p class="ts tm mt2">비워두면 오늘 날짜를 사용합니다.</p></div>
+<div id="dateDisp" class="mt3 hidden"></div>
+<button class="btn btn-p mt4" id="btnStart">작성 시작 →</button>
+</div></div>
 
-  var statusEl = document.getElementById(statusElId);
-  if(statusEl){ statusEl.textContent = '🤖 Gemini AI 분석 중...'; statusEl.style.color = '#fbbf24'; }
+<!-- STEP 2 -->
+<div class="panel" id="step2"><div class="card">
+<div class="spinner-wrap" id="s2load"><div class="spinner"></div><p>Google Apps Script에서 데이터를 수집 중...</p><p class="ts tm mt2" id="s2status">준비 중...</p></div>
+<div id="s2result" class="hidden">
+<h2>📋 수집 결과</h2><div id="s2log" class="log-box"></div>
+<h3>📺 지난주 업로드 영상 (유튜브)</h3><div id="ytR"></div>
+<h3 class="mt3">📅 지난주 일정</h3><div id="schLast"></div>
+<h3 class="mt3">📅 이번주 일정</h3><div id="schThis"></div>
+<div class="nav-row"><button class="btn btn-s" onclick="go(1)">← 이전</button><button class="btn btn-p" onclick="go(3)">다음 →</button></div>
+</div></div></div>
 
-  var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key;
+<!-- STEP 3 -->
+<div class="panel" id="step3"><div class="card">
+<h2>📊 채널 현황</h2><p class="sub">스크린샷을 업로드하면 Gemini AI가 자동 인식합니다. 인식 후 수정도 가능합니다.</p>
+<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">채널 현황 이미지 업로드 (Gemini AI 인식)</div><input type="file" accept="image/*" id="chImg"></div>
+<img id="chImgP" class="img-preview hidden">
+<div id="chOcrStatus" class="ocr-status"></div>
+<h3>지난주 데이터</h3>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:140px"><label>조회수</label><input type="text" id="ch_views"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>구독자 변화</label><input type="text" id="ch_subs"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>예상 수익</label><input type="text" id="ch_rev"></div>
+</div>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:140px"><label>재생 기반 CPM</label><input type="text" id="ch_cpm"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>RPM</label><input type="text" id="ch_rpm"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>노출 클릭률</label><input type="text" id="ch_ctr"></div>
+</div>
+<div class="fg" style="max-width:200px"><label>평균 시청 지속시간</label><input type="text" id="ch_avg"></div>
+<h3>지지난주 데이터</h3>
+<p class="ts tm mb3">← 지난주 보고서(.docx)에서 자동 추출됩니다</p>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:140px"><label>조회수</label><input type="text" id="ch2_views"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>구독자 변화</label><input type="text" id="ch2_subs"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>예상 수익</label><input type="text" id="ch2_rev"></div>
+</div>
+<div class="flex fw g2">
+<div class="fg" style="flex:1;min-width:140px"><label>재생 기반 CPM</label><input type="text" id="ch2_cpm"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>RPM</label><input type="text" id="ch2_rpm"></div>
+<div class="fg" style="flex:1;min-width:140px"><label>노출 클릭률</label><input type="text" id="ch2_ctr"></div>
+</div>
+<div class="fg" style="max-width:200px"><label>평균 시청 지속시간</label><input type="text" id="ch2_avg"></div>
+<div class="nav-row"><button class="btn btn-s" onclick="go(2)">← 이전</button><button class="btn btn-p" onclick="saveS3();go(4)">다음 →</button></div>
+</div></div>
 
-  var body = {
-    contents: [{
-      parts: [
-        { inline_data: { mime_type: mimeType, data: base64 } },
-        { text: prompt }
-      ]
-    }],
-    generationConfig: {
-      response_mime_type: 'application/json'
-    }
-  };
+<!-- STEP 4 -->
+<div class="panel" id="step4"><div class="card">
+<h2>📺 콘텐츠 유형별</h2><p class="sub">스크린샷을 업로드하면 Gemini AI가 자동 인식합니다.</p>
+<div class="upload-area"><div style="font-size:40px">🖼️</div><div style="color:#94a3b8">콘텐츠 유형 이미지 업로드 (Gemini AI 인식)</div><input type="file" accept="image/*" id="ctImg"></div>
+<img id="ctImgP" class="img-preview hidden">
+<div id="ctOcrStatus" class="ocr-status"></div>
+<h3>지난주</h3>
+<table class="tbl"><tr><th></th><th>조회수</th><th>시청 시간</th></tr>
+<tr><td><b>동영상</b></td><td><input type="text" id="ct_vv" style="width:160px" placeholder="예: 34.9만(69.4%)"></td><td><input type="text" id="ct_vw" style="width:160px" placeholder="예: 6.0만(98.7%)"></td></tr>
+<tr><td><b>Shorts</b></td><td><input type="text" id="ct_sv" style="width:160px" placeholder="예: 15.4만(30.6%)"></td><td><input type="text" id="ct_sw" style="width:160px" placeholder="예: 828.5(1.3%)"></td></tr></table>
+<h3>지지난주 데이터</h3>
+<p class="ts tm mb3">← 지난주 보고서(.docx)에서 자동 추출됩니다</p>
+<table class="tbl"><tr><th></th><th>조회수</th><th>시청 시간</th></tr>
+<tr><td><b>동영상</b></td><td><input type="text" id="ct2_vv" style="width:160px"></td><td><input type="text" id="ct2_vw" style="width:160px"></td></tr>
+<tr><td><b>Shorts</b></td><td><input type="text" id="ct2_sv" style="width:160px"></td><td><input type="text" id="ct2_sw" style="width:160px"></td></tr></table>
+<div class="nav-row"><button class="btn btn-s" onclick="go(3)">← 이전</button><button class="btn btn-p" onclick="saveS4();go(5)">다음 →</button></div>
+</div></div>
 
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-  .then(function(r){
-    if(!r.ok) return r.text().then(function(t){ throw new Error('Gemini API 오류 ('+r.status+'): '+t); });
-    return r.json();
-  })
-  .then(function(data){
-    console.log('Gemini raw response:', JSON.stringify(data));
-    var text = '';
-    try{
-      text = data.candidates[0].content.parts[0].text;
-    }catch(e){
-      throw new Error('응답 파싱 실패: ' + JSON.stringify(data));
-    }
-    console.log('Gemini text:', text);
+<!-- STEP 5 -->
+<div class="panel" id="step5"><div class="card">
+<h2>👥 구독자 & 팀원 메모</h2>
+<div class="fg"><label>현재 구독자 수 (<span id="todayL"></span>)</label><input type="text" id="curSubs" placeholder="숫자만 입력하면 자동 콤마"></div>
+<h3>팀원 특이사항</h3>
+<div class="fg"><label>양영은</label><textarea id="noteY"></textarea></div>
+<div class="fg"><label>최건일</label><textarea id="noteC"></textarea></div>
+<div class="nav-row"><button class="btn btn-s" onclick="go(4)">← 이전</button><button class="btn btn-p" onclick="saveS5();buildPreview();go(6)">다음 →</button></div>
+</div></div>
 
-    /* JSON 파싱 (```json ... ``` 감싸기 처리) */
-    var jsonStr = text.replace(/```json\s*/g,'').replace(/```/g,'').trim();
-    var parsed;
-    try{
-      parsed = JSON.parse(jsonStr);
-    }catch(e){
-      throw new Error('JSON 파싱 실패: ' + jsonStr);
-    }
+<!-- STEP 6 -->
+<div class="panel" id="step6"><div class="card">
+<h2>📝 미리보기 & 다운로드</h2><p class="sub">각 셀을 클릭하여 수정 가능합니다.</p>
+<div id="prevArea"></div>
+<div class="nav-row"><button class="btn btn-s" onclick="go(5)">← 이전</button><button class="btn btn-g" id="btnGen">✅ 문서 생성 (.docx)</button></div>
+</div></div>
 
-    if(statusEl){ statusEl.textContent = '✅ AI 인식 완료'; statusEl.style.color = '#34d399'; }
-    toast('Gemini AI 인식 완료','success');
-    callback(parsed);
-  })
-  .catch(function(err){
-    console.error('Gemini error:', err);
-    if(statusEl){ statusEl.textContent = '❌ AI 인식 실패: ' + err.message; statusEl.style.color = '#f87171'; }
-    toast('Gemini 인식 실패','error');
-  });
-}
+</div>
 
-/* ===== 채널 현황 이미지 분석 ===== */
-var CHANNEL_PROMPT = '이 이미지는 유튜브 채널 분석 스크린샷입니다. 다음 항목을 정확하게 읽어서 JSON으로 반환하세요. 숫자에 콤마(,)를 포함하고, 통화 기호(₩)는 제외하세요. 구독자 변화는 +/- 기호를 포함하세요.\n\n반환할 JSON 형식:\n{\n  "views": "조회수 (예: 484,567)",\n  "subs": "구독자 변화 (예: +485)",\n  "revenue": "예상 수익 (예: 1,265,641)",\n  "cpm": "재생 기반 CPM (예: 6,645)",\n  "rpm": "RPM (예: 3,309)",\n  "ctr": "노출 클릭률 (예: 6.3%)",\n  "avgDuration": "평균 시청 지속 시간 (예: 9:16)"\n}\n\n이미지에 해당 항목이 없으면 빈 문자열("")로 반환하세요. 반드시 유효한 JSON만 반환하세요.';
+<!-- 외부 라이브러리 -->
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
 
-function applyChannelData(data){
-  console.log('채널 데이터 적용:', data);
-  if(data.views)       setV('ch_views', data.views);
-  if(data.subs)        setV('ch_subs', data.subs);
-  if(data.revenue)     setV('ch_rev', data.revenue);
-  if(data.cpm)         setV('ch_cpm', data.cpm);
-  if(data.rpm)         setV('ch_rpm', data.rpm);
-  if(data.ctr)         setV('ch_ctr', data.ctr);
-  if(data.avgDuration) setV('ch_avg', data.avgDuration);
-}
-
-/* ===== 콘텐츠 유형 이미지 분석 ===== */
-var CONTENT_PROMPT = '이 이미지는 유튜브 콘텐츠 유형별 분석 스크린샷입니다. "동영상"과 "Shorts" 각각의 조회수와 시청 시간(시간)을 읽어 JSON으로 반환하세요.\n\n각 값은 "숫자(퍼센트%)" 형식으로 반환하되:\n- 10,000 이상이면 "만" 단위로 변환 (예: 349,262 → "34.9만", 59,591.6 → "6.0만")\n- 10,000 미만이면 콤마 포함 숫자 또는 소수점 (예: 828.5)\n- 퍼센트는 소수점 1자리 (예: 69.4%)\n\n반환할 JSON 형식:\n{\n  "videoViews": "동영상 조회수 (예: 34.9만(69.4%))",\n  "videoWatchTime": "동영상 시청 시간 (예: 6.0만(98.7%))",\n  "shortsViews": "Shorts 조회수 (예: 15.4만(30.6%))",\n  "shortsWatchTime": "Shorts 시청 시간 (예: 828.5(1.3%))"\n}\n\n이미지에 해당 항목이 없으면 빈 문자열("")로 반환하세요. 반드시 유효한 JSON만 반환하세요.';
-
-function applyContentData(data){
-  console.log('콘텐츠 데이터 적용:', data);
-  if(data.videoViews)      setV('ct_vv', data.videoViews);
-  if(data.videoWatchTime)  setV('ct_vw', data.videoWatchTime);
-  if(data.shortsViews)     setV('ct_sv', data.shortsViews);
-  if(data.shortsWatchTime) setV('ct_sw', data.shortsWatchTime);
-}
-
-/* ===== 이미지 업로드 핸들러 ===== */
-document.getElementById('chImg').addEventListener('change', function(e){
-  var f = e.target.files[0]; if(!f) return;
-  var img = document.getElementById('chImgP');
-  img.src = URL.createObjectURL(f); img.classList.remove('hidden');
-  ['ch_views','ch_subs','ch_rev','ch_cpm','ch_rpm','ch_ctr','ch_avg'].forEach(function(id){ setV(id,''); });
-  document.getElementById('chOcrStatus').textContent = '';
-  document.getElementById('chOcrStatus').style.color = '#fbbf24';
-
-  fileToBase64(f, function(base64, mimeType){
-    callGemini(base64, mimeType, CHANNEL_PROMPT, 'chOcrStatus', applyChannelData);
-  });
-});
-
-document.getElementById('ctImg').addEventListener('change', function(e){
-  var f = e.target.files[0]; if(!f) return;
-  var img = document.getElementById('ctImgP');
-  img.src = URL.createObjectURL(f); img.classList.remove('hidden');
-  ['ct_vv','ct_vw','ct_sv','ct_sw'].forEach(function(id){ setV(id,''); });
-  document.getElementById('ctOcrStatus').textContent = '';
-  document.getElementById('ctOcrStatus').style.color = '#fbbf24';
-
-  fileToBase64(f, function(base64, mimeType){
-    callGemini(base64, mimeType, CONTENT_PROMPT, 'ctOcrStatus', applyContentData);
-  });
-});
+<!-- 앱 모듈 -->
+<script src="js/app.js"></script>
+<script src="js/docx-parse.js"></script>
+<script src="js/ocr.js"></script>
+<script src="js/gas.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/export.js"></script>
+</body>
+</html>
