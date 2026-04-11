@@ -1,398 +1,306 @@
-/* ── css/style.css ─────────────────────────────────────────── */
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>머니올라 주간보고서 생성기</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+<!-- ── 진행 표시 바 ── -->
+<nav id="progressBar">
+  <button id="prog1" class="prog-step active" onclick="goStep(1)">① 시작</button>
+  <button id="prog2" class="prog-step" onclick="goStep(2)">② 수집</button>
+  <button id="prog3" class="prog-step" onclick="goStep(3)">③ 채널현황</button>
+  <button id="prog4" class="prog-step" onclick="goStep(4)">④ 콘텐츠유형</button>
+  <button id="prog5" class="prog-step" onclick="goStep(5)">⑤ 구독자·메모</button>
+  <button id="prog6" class="prog-step" onclick="goStep(6)">⑥ 미리보기</button>
+</nav>
 
-body {
-  font-family: 'Noto Sans KR', sans-serif;
-  background: #0f1923;
-  color: #e0e0e0;
-  min-height: 100vh;
-  padding: 20px;
-}
+<!-- ── 컨테이너 ── -->
+<div id="container">
 
-/* ── 진행 표시 바 ── */
-#progressBar {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px 0;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
+  <!-- ════════════════════════════════════════════════════════
+       Step 1: 시작 — docx 업로드 + 날짜 설정
+       ════════════════════════════════════════════════════════ -->
+  <div id="step1" class="panel">
+    <h2>① 시작</h2>
+    <p class="desc">이전 주차 보고서(.docx)를 업로드하면 지지난주 데이터를 자동으로 불러옵니다.</p>
 
-.prog-step {
-  background: #1e2d3d;
-  color: #8899aa;
-  border: 1px solid #2a3a4a;
-  border-radius: 20px;
-  padding: 8px 18px;
-  font-size: 13px;
-  font-family: 'Noto Sans KR', sans-serif;
-  cursor: pointer;
-  transition: all 0.3s;
-}
+    <div class="upload-box">
+      <label for="docxFile" class="upload-label">
+        <span class="upload-icon">📄</span>
+        <span>이전 주차 보고서 업로드 (.docx)</span>
+      </label>
+      <input type="file" id="docxFile" accept=".docx" style="display:none;">
+      <p id="docxStatus" class="status-text"></p>
+    </div>
 
-.prog-step:hover {
-  background: #253545;
-}
+    <div class="form-group" style="margin-top:20px;">
+      <label for="manualDate">기준 날짜 (선택사항 — 비워두면 오늘 기준)</label>
+      <input type="date" id="manualDate">
+    </div>
 
-.prog-step.active {
-  background: #2563eb;
-  color: #fff;
-  border-color: #2563eb;
-}
+    <div style="margin-top:10px;">
+      <span id="badgeLast" class="badge"></span>
+      <span id="badgeThis" class="badge"></span>
+    </div>
 
-.prog-step.done {
-  background: #1a4a2e;
-  color: #6ee7b7;
-  border-color: #2a6a3e;
-}
+    <div style="margin-top:30px; text-align:center;">
+      <button id="btnStart" class="btn-primary">시작하기 →</button>
+    </div>
+  </div>
 
-/* ── 컨테이너 ── */
-#container {
-  max-width: 900px;
-  margin: 0 auto;
-}
+  <!-- ════════════════════════════════════════════════════════
+       Step 2: 데이터 수집 — 일정 + 유튜브
+       ════════════════════════════════════════════════════════ -->
+  <div id="step2" class="panel" style="display:none;">
+    <h2>② 데이터 수집</h2>
 
-/* ── 패널 ── */
-.panel {
-  background: #1a2636;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-}
+    <!-- 로딩 표시 -->
+    <div id="s2Loading" style="text-align:center; padding:60px 20px;">
+      <div class="spinner"></div>
+      <p style="margin-top:16px; font-size:16px;">Google Apps Script에서 데이터를 수집 중...</p>
+      <p id="logArea" style="color:#888; font-size:13px; margin-top:8px;">준비 중...</p>
+    </div>
 
-.panel h2 {
-  font-size: 22px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  color: #f0f0f0;
-}
+    <!-- 실제 컨텐츠 (로딩 완료 후 표시) -->
+    <div id="s2Content" style="display:none;">
 
-.panel h3 {
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 12px;
-  margin-top: 8px;
-  color: #c0d0e0;
-}
+      <h3>▸ 지난주 업로드 영상 (유튜브)</h3>
+      <div id="ytList" class="table-wrap"></div>
 
-.panel h3 small {
-  font-weight: 400;
-  color: #778899;
-  font-size: 12px;
-}
+      <h3 style="margin-top:24px;">▸ 지난주 일정</h3>
+      <div id="schLast" class="table-wrap"></div>
 
-.desc {
-  color: #778899;
-  font-size: 14px;
-  margin-bottom: 20px;
-}
+      <h3 style="margin-top:24px;">▸ 이번주 일정</h3>
+      <div id="schThis" class="table-wrap"></div>
 
-/* ── 업로드 박스 ── */
-.upload-box {
-  border: 2px dashed #3a4a5a;
-  border-radius: 12px;
-  padding: 40px 20px;
-  text-align: center;
-  margin-bottom: 16px;
-  transition: border-color 0.3s;
-}
+      <div class="nav-buttons">
+        <button onclick="goStep(1)">← 이전</button>
+        <button onclick="goStep(3)" class="btn-primary">다음 →</button>
+      </div>
+    </div>
+  </div>
 
-.upload-box:hover {
-  border-color: #5a7a9a;
-}
+  <!-- ════════════════════════════════════════════════════════
+       Step 3: 채널 현황 — 이미지 OCR
+       ════════════════════════════════════════════════════════ -->
+  <div id="step3" class="panel" style="display:none;">
+    <h2>📊 채널 현황</h2>
+    <p class="desc">스크린샷을 업로드하면 OCR로 자동 인식합니다. 인식 후 수정도 가능합니다.</p>
 
-.upload-label {
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  color: #8899aa;
-  font-size: 15px;
-}
+    <div class="upload-box">
+      <label for="chImg" class="upload-label">
+        <span class="upload-icon">🖼️</span>
+        <span>채널 현황 이미지 업로드 (자동 OCR)</span>
+      </label>
+      <input type="file" id="chImg" accept="image/*" style="display:none;">
+      <img id="chImgP" class="preview-img" style="display:none;">
+    </div>
 
-.upload-icon {
-  font-size: 48px;
-}
+    <p id="chOcrStatus" class="status-text"></p>
 
-.preview-img {
-  max-width: 100%;
-  max-height: 300px;
-  margin-top: 16px;
-  border-radius: 8px;
-  border: 1px solid #3a4a5a;
-}
+    <!-- 지난주 데이터 -->
+    <h3>지난주 데이터</h3>
+    <div class="grid-3">
+      <div class="form-group">
+        <label>조회수</label>
+        <input type="text" id="ch_views" placeholder="조회수">
+      </div>
+      <div class="form-group">
+        <label>구독자 변화</label>
+        <input type="text" id="ch_subs" placeholder="+0">
+      </div>
+      <div class="form-group">
+        <label>예상 수익</label>
+        <input type="text" id="ch_rev" placeholder="예상 수익">
+      </div>
+    </div>
+    <div class="grid-3">
+      <div class="form-group">
+        <label>재생 기반 CPM</label>
+        <input type="text" id="ch_cpm" placeholder="CPM">
+      </div>
+      <div class="form-group">
+        <label>RPM</label>
+        <input type="text" id="ch_rpm" placeholder="RPM">
+      </div>
+      <div class="form-group">
+        <label>노출 클릭률</label>
+        <input type="text" id="ch_ctr" placeholder="0.0%">
+      </div>
+    </div>
+    <div class="grid-3">
+      <div class="form-group">
+        <label>평균 시청 지속시간</label>
+        <input type="text" id="ch_avg" placeholder="0:00">
+      </div>
+    </div>
 
-.status-text {
-  font-size: 13px;
-  color: #6ee7b7;
-  margin-bottom: 16px;
-}
+    <!-- 지지난주 데이터 (docx에서 자동 파싱) -->
+    <h3 style="margin-top:24px;">지지난주 데이터 <small>(이전 보고서에서 자동 입력)</small></h3>
+    <div class="grid-3">
+      <div class="form-group">
+        <label>조회수</label>
+        <input type="text" id="ch2_views" placeholder="조회수">
+      </div>
+      <div class="form-group">
+        <label>구독자 변화</label>
+        <input type="text" id="ch2_subs" placeholder="+0">
+      </div>
+      <div class="form-group">
+        <label>예상 수익</label>
+        <input type="text" id="ch2_rev" placeholder="예상 수익">
+      </div>
+    </div>
+    <div class="grid-3">
+      <div class="form-group">
+        <label>재생 기반 CPM</label>
+        <input type="text" id="ch2_cpm" placeholder="CPM">
+      </div>
+      <div class="form-group">
+        <label>RPM</label>
+        <input type="text" id="ch2_rpm" placeholder="RPM">
+      </div>
+      <div class="form-group">
+        <label>노출 클릭률</label>
+        <input type="text" id="ch2_ctr" placeholder="0.0%">
+      </div>
+    </div>
+    <div class="grid-3">
+      <div class="form-group">
+        <label>평균 시청 지속시간</label>
+        <input type="text" id="ch2_avg" placeholder="0:00">
+      </div>
+    </div>
 
-/* ── 폼 ── */
-.form-group {
-  margin-bottom: 16px;
-}
+    <div class="nav-buttons">
+      <button onclick="goStep(2)">← 이전</button>
+      <button onclick="saveS3(); goStep(4);" class="btn-primary">저장 & 다음 →</button>
+    </div>
+  </div>
 
-.form-group label {
-  display: block;
-  font-size: 13px;
-  color: #8899aa;
-  margin-bottom: 6px;
-  font-weight: 500;
-}
+  <!-- ════════════════════════════════════════════════════════
+       Step 4: 콘텐츠 유형별 — 이미지 OCR
+       ════════════════════════════════════════════════════════ -->
+  <div id="step4" class="panel" style="display:none;">
+    <h2>🎬 콘텐츠 유형별</h2>
+    <p class="desc">스크린샷을 업로드하면 OCR로 자동 인식합니다.</p>
 
-.form-group input[type="text"],
-.form-group input[type="date"],
-.form-group textarea {
-  width: 100%;
-  background: #0f1923;
-  border: 1px solid #2a3a4a;
-  border-radius: 8px;
-  padding: 10px 14px;
-  color: #e0e0e0;
-  font-size: 14px;
-  font-family: 'Noto Sans KR', sans-serif;
-  transition: border-color 0.3s;
-}
+    <div class="upload-box">
+      <label for="ctImg" class="upload-label">
+        <span class="upload-icon">🖼️</span>
+        <span>콘텐츠 유형 이미지 업로드 (자동 OCR)</span>
+      </label>
+      <input type="file" id="ctImg" accept="image/*" style="display:none;">
+      <img id="ctImgP" class="preview-img" style="display:none;">
+    </div>
 
-.form-group input:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: #2563eb;
-}
+    <p id="ctOcrStatus" class="status-text"></p>
 
-/* 그리드 레이아웃 */
-.grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
+    <!-- 지난주 -->
+    <h3>지난주</h3>
+    <table class="input-table">
+      <tr>
+        <th></th><th>조회수</th><th>시청 시간</th>
+      </tr>
+      <tr>
+        <td><strong>동영상</strong></td>
+        <td><input type="text" id="ct_vv" placeholder="0만(0%)"></td>
+        <td><input type="text" id="ct_vw" placeholder="0만(0%)"></td>
+      </tr>
+      <tr>
+        <td><strong>Shorts</strong></td>
+        <td><input type="text" id="ct_sv" placeholder="0만(0%)"></td>
+        <td><input type="text" id="ct_sw" placeholder="0(0%)"></td>
+      </tr>
+    </table>
 
-@media (max-width: 600px) {
-  .grid-3 {
-    grid-template-columns: 1fr;
-  }
-}
+    <!-- 지지난주 -->
+    <h3 style="margin-top:24px;">지지난주 <small>(이전 보고서에서 자동 입력)</small></h3>
+    <table class="input-table">
+      <tr>
+        <th></th><th>조회수</th><th>시청 시간</th>
+      </tr>
+      <tr>
+        <td><strong>동영상</strong></td>
+        <td><input type="text" id="ct2_vv" placeholder="0만(0%)"></td>
+        <td><input type="text" id="ct2_vw" placeholder="0만(0%)"></td>
+      </tr>
+      <tr>
+        <td><strong>Shorts</strong></td>
+        <td><input type="text" id="ct2_sv" placeholder="0만(0%)"></td>
+        <td><input type="text" id="ct2_sw" placeholder="0(0%)"></td>
+      </tr>
+    </table>
 
-/* ── 입력 테이블 (콘텐츠 유형) ── */
-.input-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 16px;
-}
+    <div class="nav-buttons">
+      <button onclick="goStep(3)">← 이전</button>
+      <button onclick="saveS4(); goStep(5);" class="btn-primary">저장 & 다음 →</button>
+    </div>
+  </div>
 
-.input-table th,
-.input-table td {
-  padding: 8px 12px;
-  text-align: left;
-  border-bottom: 1px solid #2a3a4a;
-}
+  <!-- ════════════════════════════════════════════════════════
+       Step 5: 구독자 현황 + 팀원 특이사항
+       ════════════════════════════════════════════════════════ -->
+  <div id="step5" class="panel" style="display:none;">
+    <h2>👥 구독자 · 메모</h2>
 
-.input-table th {
-  font-size: 13px;
-  color: #8899aa;
-  font-weight: 500;
-}
+    <div class="form-group">
+      <label>현재 구독자 수</label>
+      <input type="text" id="curSubs" placeholder="예: 150,000">
+    </div>
 
-.input-table td strong {
-  color: #c0d0e0;
-  font-size: 14px;
-}
+    <h3 style="margin-top:30px;">팀원별 특이사항</h3>
+    <p class="desc">Google Docs에서 자동으로 불러옵니다. 수동 수정도 가능합니다.</p>
 
-.input-table input[type="text"] {
-  width: 100%;
-  background: #0f1923;
-  border: 1px solid #2a3a4a;
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: #e0e0e0;
-  font-size: 14px;
-  font-family: 'Noto Sans KR', sans-serif;
-}
+    <div class="form-group">
+      <label>양영은</label>
+      <textarea id="noteY" rows="3" placeholder="양영은 특이사항"></textarea>
+    </div>
+    <div class="form-group">
+      <label>최건일</label>
+      <textarea id="noteC" rows="3" placeholder="최건일 특이사항"></textarea>
+    </div>
 
-.input-table input:focus {
-  outline: none;
-  border-color: #2563eb;
-}
+    <div class="nav-buttons">
+      <button onclick="goStep(4)">← 이전</button>
+      <button onclick="saveS5(); goStep(6);" class="btn-primary">저장 & 미리보기 →</button>
+    </div>
+  </div>
 
-/* ── 데이터 테이블 (Step 2, 미리보기) ── */
-.table-wrap {
-  overflow-x: auto;
-  margin-bottom: 12px;
-}
+  <!-- ════════════════════════════════════════════════════════
+       Step 6: 미리보기 & 다운로드
+       ════════════════════════════════════════════════════════ -->
+  <div id="step6" class="panel" style="display:none;">
+    <h2>📋 미리보기 & 다운로드</h2>
 
-.table-wrap table,
-.preview-area table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
+    <div id="prevArea" class="preview-area"></div>
 
-.table-wrap table th,
-.table-wrap table td,
-.preview-area table th,
-.preview-area table td {
-  padding: 8px 12px;
-  border: 1px solid #2a3a4a;
-  text-align: center;
-  vertical-align: middle;
-}
+    <div class="nav-buttons">
+      <button onclick="goStep(5)">← 이전</button>
+      <button id="btnGen" class="btn-primary btn-download">📥 DOCX 다운로드</button>
+    </div>
+  </div>
 
-.table-wrap table th,
-.preview-area table th {
-  background: #253545;
-  color: #a0b8d0;
-  font-weight: 600;
-  font-size: 12px;
-  white-space: nowrap;
-}
+</div><!-- /container -->
 
-.table-wrap table td,
-.preview-area table td {
-  color: #d0e0f0;
-}
+<!-- ── 외부 라이브러리 ── -->
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<script src="https://unpkg.com/docx@7.8.2/build/index.js"></script>
 
-/* ── 배지 ── */
-.badge {
-  display: inline-block;
-  background: #1e3a5f;
-  color: #7cb3e0;
-  padding: 4px 14px;
-  border-radius: 12px;
-  font-size: 13px;
-  margin-right: 8px;
-}
+<!-- ── 앱 스크립트 (순서 중요) ── -->
+<script src="js/app.js"></script>
+<script src="js/docx-parse.js"></script>
+<script src="js/ocr.js"></script>
+<script src="js/gas.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/export.js"></script>
 
-/* ── 버튼 ── */
-button {
-  font-family: 'Noto Sans KR', sans-serif;
-  cursor: pointer;
-}
-
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  padding: 12px 32px;
-  font-size: 15px;
-  font-weight: 600;
-  transition: background 0.3s;
-}
-
-.btn-primary:hover {
-  background: #1d4ed8;
-}
-
-.btn-download {
-  font-size: 17px;
-  padding: 14px 40px;
-}
-
-.nav-buttons {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 30px;
-}
-
-.nav-buttons button:first-child {
-  background: #253545;
-  color: #8899aa;
-  border: 1px solid #3a4a5a;
-  border-radius: 10px;
-  padding: 10px 24px;
-  font-size: 14px;
-}
-
-.nav-buttons button:first-child:hover {
-  background: #2a4050;
-}
-
-/* ── 스피너 ── */
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #2a3a4a;
-  border-top-color: #2563eb;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ── 미리보기 영역 ── */
-.preview-area {
-  background: #fff;
-  color: #222;
-  border-radius: 12px;
-  padding: 32px;
-  min-height: 400px;
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.preview-area h2 {
-  color: #111;
-  font-size: 18px;
-  margin-bottom: 16px;
-}
-
-.preview-area h3 {
-  color: #333;
-  font-size: 15px;
-  margin: 20px 0 10px;
-}
-
-.preview-area table th {
-  background: #d9e2f3;
-  color: #333;
-  border-color: #bbb;
-}
-
-.preview-area table td {
-  color: #333;
-  border-color: #bbb;
-}
-
-/* ── 토스트 ── */
-#toast {
-  display: none;
-  position: fixed;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #333;
-  color: #fff;
-  padding: 12px 24px;
-  border-radius: 8px;
-  z-index: 9999;
-  font-size: 14px;
-  transition: opacity 0.3s;
-}
-
-/* ── 반응형 ── */
-@media (max-width: 600px) {
-  body {
-    padding: 10px;
-  }
-  .panel {
-    padding: 20px 16px;
-  }
-  .nav-buttons {
-    flex-direction: column;
-    gap: 10px;
-  }
-  .nav-buttons button {
-    width: 100%;
-  }
-}
+</body>
+</html>
