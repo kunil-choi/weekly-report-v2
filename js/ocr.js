@@ -47,7 +47,7 @@ function callGemini(base64, mimeType, prompt, statusElId, callback){
   var statusEl = document.getElementById(statusElId);
   if(statusEl){ statusEl.textContent = '🤖 Gemini AI 분석 중...'; statusEl.style.color = '#fbbf24'; }
 
-  var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=' + key;
+  var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key;
 
   var body = {
     contents: [{
