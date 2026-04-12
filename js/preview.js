@@ -34,17 +34,27 @@ function buildPreview(){
   h+='<h4 style="color:#818cf8;margin:14px 0 6px">▸ 지난주 실적 ('+lwRange+')</h4>';
   h+='<table class="tbl" id="t1a"><tr><th>날짜</th><th>유튜브 업로드 콘텐츠</th><th>조회수</th></tr>';
   var lwD=daysIn(S.lws,S.lwe);
-  for(var di=0;di<lwD.length;di++){
+    for(var di=0;di<lwD.length;di++){
     var d=lwD[di];var dateLabel=fmtShort(d)+'('+DK[d.getDay()]+')';
     var vid=S.yt.filter(function(v){return sameDay(v._date,d)});
-    var ytTitle='-', views='-';
-    if(vid.length){
-      ytTitle=vid.map(function(v){return v.title}).join(', ');
-      var totalViews=0;
-      for(var vi=0;vi<vid.length;vi++) totalViews+=Number(vid[vi].views)||0;
-      views=totalViews.toLocaleString();
+    if(vid.length>1){
+      for(var vi=0;vi<vid.length;vi++){
+        var vTitle=vid[vi].title||'-';
+        var vViews=(Number(vid[vi].views)||0).toLocaleString();
+        if(vi===0){
+          h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+vTitle+'</td><td contenteditable="true">'+vViews+'</td></tr>';
+        }else{
+          h+='<tr><td></td><td contenteditable="true">'+vTitle+'</td><td contenteditable="true">'+vViews+'</td></tr>';
+        }
+      }
+    }else{
+      var ytTitle='-', views='-';
+      if(vid.length){
+        ytTitle=vid[0].title||'-';
+        views=(Number(vid[0].views)||0).toLocaleString();
+      }
+      h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+ytTitle+'</td><td contenteditable="true">'+views+'</td></tr>';
     }
-    h+='<tr><td>'+dateLabel+'</td><td contenteditable="true">'+ytTitle+'</td><td contenteditable="true">'+views+'</td></tr>';
   }
   h+='</table>';
 
