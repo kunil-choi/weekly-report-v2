@@ -95,11 +95,12 @@ function buildPreview(){
   /* ===== 콘텐츠 유형별 (이미지와 동일한 4열) ===== */
   h+='<h3>■ 콘텐츠 유형별 ('+lwRange+')</h3>';
   h+='<table class="tbl" id="t3"><tr><th></th><th></th><th>조회수</th><th>시청 시간</th></tr>';
-  h+='<tr><td rowspan="2"><b>'+lwRange+'</b></td><td>동영상</td><td contenteditable="true">'+(S.ct.vv||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+'</td></tr>';
-  h+='<tr><td>Shorts</td><td contenteditable="true">'+(S.ct.sv||'')+'</td><td contenteditable="true">'+(S.ct.sw||'')+'</td></tr>';
-  h+='<tr><td rowspan="2"><b>'+ppRange+'</b></td><td>동영상</td><td contenteditable="true">'+(S.ct2.vv||'')+'</td><td contenteditable="true">'+(S.ct2.vw||'')+'</td></tr>';
-  h+='<tr><td>Shorts</td><td contenteditable="true">'+(S.ct2.sv||'')+'</td><td contenteditable="true">'+(S.ct2.sw||'')+'</td></tr>';
+  h+='<tr><td><b>'+lwRange+'</b></td><td>동영상</td><td contenteditable="true">'+(S.ct.vv||'')+'</td><td contenteditable="true">'+(S.ct.vw||'')+'</td></tr>';
+  h+='<tr><td><b>'+lwRange+'</b></td><td>Shorts</td><td contenteditable="true">'+(S.ct.sv||'')+'</td><td contenteditable="true">'+(S.ct.sw||'')+'</td></tr>';
+  h+='<tr><td><b>'+ppRange+'</b></td><td>동영상</td><td contenteditable="true">'+(S.ct2.vv||'')+'</td><td contenteditable="true">'+(S.ct2.vw||'')+'</td></tr>';
+  h+='<tr><td><b>'+ppRange+'</b></td><td>Shorts</td><td contenteditable="true">'+(S.ct2.sv||'')+'</td><td contenteditable="true">'+(S.ct2.sw||'')+'</td></tr>';
   h+='</table>';
+
 
   /* ===== 구독자 & 메모 ===== */
   h+='<h3>■ 구독자 현황</h3>';
