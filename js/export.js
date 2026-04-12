@@ -104,7 +104,7 @@ function doGenerateDocx(){
         children:[new D.TextRun({text:'■ 콘텐츠 유형별 ('+lwRange+')',bold:true,size:24,font:'맑은 고딕'})],
         spacing:{before:300,after:100}
       }));
-      children.push(buildDocTable(D,t3,[1500,1500,3300,3300],'D9E2F3'));
+      children.push(buildDocTable(D,t3,[1200,1200,1200,3000,3000],'D9E2F3'));
       children.push(new D.Paragraph({text:'',spacing:{after:120}}));
     }
 
