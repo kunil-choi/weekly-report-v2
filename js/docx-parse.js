@@ -79,14 +79,20 @@ function parsePrevReport(html){
       for(var ri=1;ri<rows.length;ri++){
         var cells=rows[ri].querySelectorAll('td');
         if(cells.length<3)continue;
-        var label=(cells[0]||{}).textContent||'';
-        if(label.indexOf('동영상')>-1){
-          setV('ct2_vv',(cells[1]||{}).textContent||'');
-          setV('ct2_vw',(cells[2]||{}).textContent||'');
+        var rowText='';
+        for(var ci=0;ci<cells.length;ci++) rowText+=(cells[ci].textContent||'')+' ';
+        
+        /* 조회수와 시청시간은 항상 마지막 2개 셀 */
+        var viewsCell=(cells[cells.length-2]||{}).textContent||'';
+        var watchCell=(cells[cells.length-1]||{}).textContent||'';
+        
+        if(rowText.indexOf('동영상')>-1){
+          setV('ct2_vv',viewsCell);
+          setV('ct2_vw',watchCell);
         }
-        if(label.match(/쇼츠|Shorts|shorts/i)){
-          setV('ct2_sv',(cells[1]||{}).textContent||'');
-          setV('ct2_sw',(cells[2]||{}).textContent||'');
+        if(rowText.match(/쇼츠|Shorts|shorts/i)){
+          setV('ct2_sv',viewsCell);
+          setV('ct2_sw',watchCell);
         }
       }
     }
