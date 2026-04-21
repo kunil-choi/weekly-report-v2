@@ -12,6 +12,14 @@ function readTbl(id){
 }
 
 function buildDocTable(D,rows,colWidths,headerShade){
+  var PAGE_W=10240;
+  /* colWidths 합계를 PAGE_W에 맞게 비례 확대 */
+  var total=0;
+  if(colWidths){for(var k=0;k<colWidths.length;k++)total+=colWidths[k];}
+  var scale=(total>0)?PAGE_W/total:1;
+  var scaled=[];
+  if(colWidths){for(var k=0;k<colWidths.length;k++)scaled.push(Math.round(colWidths[k]*scale));}
+
   var tblRows=[];
   for(var ri=0;ri<rows.length;ri++){
     var cells=[];
@@ -27,12 +35,12 @@ function buildDocTable(D,rows,colWidths,headerShade){
         margins:{top:30,bottom:30,left:50,right:50}
       };
       if(isH&&headerShade) cellOpts.shading={fill:headerShade,type:D.ShadingType.CLEAR};
-      if(colWidths&&colWidths[ci]) cellOpts.width={size:colWidths[ci],type:D.WidthType.DXA};
+      if(scaled.length>ci) cellOpts.width={size:scaled[ci],type:D.WidthType.DXA};
       cells.push(new D.TableCell(cellOpts));
     }
     tblRows.push(new D.TableRow({children:cells}));
   }
-  return new D.Table({rows:tblRows,width:{size:9600,type:D.WidthType.DXA}});
+  return new D.Table({rows:tblRows,width:{size:PAGE_W,type:D.WidthType.DXA}});
 }
 
 function doGenerateDocx(){
