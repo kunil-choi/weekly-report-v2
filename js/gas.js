@@ -1,157 +1,181 @@
-/* ===== Step 2: GAS 호출 ===== */
+function doGet(e) {
+  var action = (e.parameter.action || '').toLowerCase();
+  var result = {};
+  try {
+    if (action === 'schedule') result = getSchedule();
+    else if (action === 'youtube') result = getYouTube();
+    else if (action === 'docnotes') result = { docnotes: getDocNotes() };
+    else if (action === 'all') result = { schedule: getSchedule(), youtube: getYouTube(), docnotes: getDocNotes() };
+    else result = { error: 'action 파라미터 필요 (schedule, youtube, docnotes, all)' };
+  } catch (err) {
+    result = { error: err.toString(), stack: err.stack };
+  }
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
 
-/* \r 구분된 녹화 데이터를 "시간 출연자, 시간 출연자" 형태로 변환 */
-function parseRecordPairs(recordTimeRaw, performerRaw){
-  if(!recordTimeRaw && !performerRaw) return '';
-  var sep = /\\r|\r|\n/;
-  var times = (recordTimeRaw||'').split(sep).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
-  var perfs = (performerRaw||'').split(sep).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
-  if(times.length===0 && perfs.length===0) return '';
-  if(times.length === perfs.length){
-    var pairs=[];
-    for(var i=0;i<times.length;i++) pairs.push(times[i]+' '+perfs[i]);
-    return pairs.join(', ');
+function getSchedule() {
+  var docId = '1bgzLVIuVQUK9TDgY5pAzR_XcQzWKEsQaDS8f9CDDlZ8';
+  var url = 'https://docs.google.com/document/d/' + docId + '/export?format=txt';
+  var response = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
+  var text = response.getContentText();
+  var rows = [];
+
+  var blocks = text.split(/(?=\d{1,2}월\s*\d{1,2}일)/);
+
+  for (var i = 0; i < blocks.length; i++) {
+    var block = blocks[i].trim();
+    if (!block) continue;
+
+    var dateMatch = block.match(/^(\d{1,2})월\s*(\d{1,2})일\s*\((.)\)/);
+    if (!dateMatch) continue;
+
+    var month = parseInt(dateMatch[1]);
+    var day = parseInt(dateMatch[2]);
+    var dayOfWeek = dateMatch[3];
+    var dateStr = dateMatch[1] + '월 ' + dateMatch[2] + '일(' + dayOfWeek + ')';
+
+    var parts = block.split('\t');
+    var recordTimeRaw = '';
+    var performerRaw = '';
+    var producerRaw = '';
+    var editorRaw = '';
+    var uploadItemRaw = '';
+    var noteRaw = '';
+
+    if (parts.length >= 2) recordTimeRaw = parts[1].replace(/;/g, ':').trim();
+    if (parts.length >= 3) performerRaw = parts[2].trim();
+    if (parts.length >= 4) producerRaw = parts[3].trim();
+    if (parts.length >= 5) editorRaw = parts[4].trim();
+    if (parts.length >= 6) uploadItemRaw = parts[5].trim();
+    if (parts.length >= 8) noteRaw = parts[7].trim();
+
+    var studioRecord = buildStudioRecord(recordTimeRaw, performerRaw);
+
+    var recordTime = recordTimeRaw.replace(/\n/g, '\\r');
+    var performer = performerRaw.replace(/\n/g, '\\r');
+    var uploadItem = uploadItemRaw.replace(/\n/g, ' ').trim();
+    var note = noteRaw.replace(/\n/g, ' ').trim();
+
+    rows.push({
+      dateStr: dateStr,
+      month: month,
+      day: day,
+      recordTime: recordTime,
+      performer: performer,
+      producer: producerRaw.replace(/\n/g, ' ').trim(),
+      editor: editorRaw.replace(/\n/g, ' ').trim(),
+      uploadItem: uploadItem,
+      studioRecord: studioRecord,
+      note: note
+    });
   }
-  if(times.length>0 && perfs.length===0) return times.join(', ');
-  if(times.length===0 && perfs.length>0) return perfs.join(', ');
-  var pairs=[];
-  var maxLen=Math.max(times.length,perfs.length);
-  for(var i=0;i<maxLen;i++){
-    var t=times[i]||''; var p=perfs[i]||'';
-    pairs.push((t+(t&&p?' ':'')+p).trim());
+
+  return { success: true, count: rows.length, rows: rows };
+}
+
+function buildStudioRecord(recordTimeRaw, performerRaw) {
+  if (!recordTimeRaw && !performerRaw) return '';
+
+  var times = recordTimeRaw.split(/\n/).map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
+  var perfs = performerRaw.split(/\n/).map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
+
+  if (times.length === 0 && perfs.length > 0) return perfs.join(', ');
+  if (times.length > 0 && perfs.length === 0) return times.join(', ');
+
+  var pairs = [];
+  var maxLen = Math.max(times.length, perfs.length);
+  for (var k = 0; k < maxLen; k++) {
+    var t = times[k] || '';
+    var p = perfs[k] || '';
+    if (t && p) pairs.push(t + ' ' + p);
+    else if (t) pairs.push(t);
+    else if (p) pairs.push(p);
   }
+
   return pairs.join(', ');
 }
 
-function cleanStudioRecord(studioRecordRaw, recordTimeRaw, performerRaw){
-  var fromPairs = parseRecordPairs(recordTimeRaw, performerRaw);
-  if(fromPairs) return fromPairs;
-  if(!studioRecordRaw) return '';
-  var sep = /\\r|\r|\n/;
-  var parts = studioRecordRaw.split(sep).map(function(s){return s.trim()}).filter(function(s){return s.length>0});
-  return parts.join(', ');
-}
+function getYouTube() {
+  var channelId = 'UCAySceX4rbSr408F1dUpuUw';
+  var rssUrl = 'https://www.youtube.com/feeds/videos.xml?channel_id=' + channelId;
+  var videos = [];
+  var xml = '';
+  var lastError = '';
 
-function runStep2(){
-  var st=document.getElementById('s2status');
-  document.getElementById('s2log').innerHTML='';
-  st.textContent='Google Apps Script 호출 중...';
-  addLog('=== 데이터 수집 시작 ===');
-
-  fetch(GAS_URL+'?action=all').then(function(r){return r.json()}).then(function(data){
-    addLog('API 응답 수신','ok');
-
-    /* ── 일정 데이터 ── */
-    if(data.schedule&&data.schedule.success){
-      var rows=data.schedule.rows||[];
-      var yr=S.baseDate.getFullYear();
-      for(var i=0;i<rows.length;i++){
-        rows[i]._date=new Date(yr,rows[i].month-1,rows[i].day);
-        rows[i]._rawRecordTime = rows[i].recordTime || '';
-        rows[i]._rawPerformer = rows[i].performer || '';
-        rows[i]._rawStudioRecord = rows[i].studioRecord || '';
-        rows[i].studioRecordClean = cleanStudioRecord(rows[i].studioRecord, rows[i].recordTime, rows[i].performer);
-        rows[i].uploadItem=clean(rows[i].uploadItem);
-        rows[i].studioRecord=clean(rows[i].studioRecord);
-        rows[i].note=clean(rows[i].note);
-        rows[i].recordTime=clean(rows[i].recordTime||'');
+  // 최대 3회 재시도
+  for (var attempt = 1; attempt <= 3; attempt++) {
+    try {
+      var response = UrlFetchApp.fetch(rssUrl, {muteHttpExceptions: true});
+      var code = response.getResponseCode();
+      xml = response.getContentText();
+      
+      if (code === 200 && xml.indexOf('<entry>') !== -1) {
+        break; // 성공
+      } else {
+        lastError = 'HTTP ' + code + ', entry 없음 (시도 ' + attempt + ')';
+        xml = '';
+        if (attempt < 3) Utilities.sleep(2000);
       }
-      S.lastSch=rows.filter(function(r){return inRange(r._date,S.lws,S.lwe)});
-      S.thisSch=rows.filter(function(r){return inRange(r._date,S.tws,S.twe)});
-      addLog('일정: 전체 '+rows.length+'건 / 지난주 '+S.lastSch.length+'건, 이번주 '+S.thisSch.length+'건','ok');
-      toast('일정표 수집 완료','success');
-    }else{addLog('일정표 실패','err')}
-
-    /* ── 유튜브 데이터 ── */
-    if(data.youtube&&data.youtube.success){
-      var vids=data.youtube.videos||[];
-      for(var i=0;i<vids.length;i++){vids[i]._date=new Date(vids[i].published);vids[i].title=clean(vids[i].title)}
-      S.yt=vids.filter(function(v){return inRange(v._date,S.lws,S.lwe)});
-      S.yt.sort(function(a,b){return a._date-b._date});
-      addLog('유튜브: 전체 '+vids.length+'건 / 지난주 '+S.yt.length+'건','ok');
-      toast('유튜브 수집 완료','success');
-    }else{addLog('유튜브 실패','err')}
-
-    /* ── 팀원 특이사항 (Google Docs 연동) ── */
-    if(data.docnotes){
-      if(data.docnotes.yangNote){
-        setV('noteY', data.docnotes.yangNote);
-        addLog('양영은 메모: '+data.docnotes.yangNote,'ok');
-      }
-      if(data.docnotes.choiNote){
-        setV('noteC', data.docnotes.choiNote);
-        addLog('최건일 메모: '+data.docnotes.choiNote,'ok');
-      }
+    } catch (err) {
+      lastError = err.toString() + ' (시도 ' + attempt + ')';
+      xml = '';
+      if (attempt < 3) Utilities.sleep(2000);
     }
-
-    document.getElementById('s2load').classList.add('hidden');
-    document.getElementById('s2result').classList.remove('hidden');
-    renderS2();
-  }).catch(function(e){
-    addLog('오류: '+e.message,'err');
-    document.getElementById('s2load').classList.add('hidden');
-    document.getElementById('s2result').classList.remove('hidden');
-    renderS2();
-  });
-}
-
-/* ===== Step 2 렌더링 ===== */
-function renderS2(){
-  /* 유튜브 */
-  var yd=document.getElementById('ytR');
-  if(!S.yt.length){yd.innerHTML='<p class="ts tm">영상 없음</p>'}
-  else{
-    var h='<table class="tbl"><tr><th>날짜</th><th>제목</th><th>조회수</th></tr>';
-    for(var i=0;i<S.yt.length;i++){
-      var v=S.yt[i];
-      h+='<tr><td>'+fmt(v._date)+'</td><td>'+v.title+'</td><td>'+Number(v.views).toLocaleString()+'</td></tr>';
-    }
-    h+='</table>';yd.innerHTML=h;
   }
 
-  /* 지난주 일정: 녹화 + 특이사항만 (업로드 제외) */
-  var ld=document.getElementById('schLast');
-  if(!S.lastSch.length){ld.innerHTML='<p class="ts tm">일정 없음</p>'}
-  else{
-    var byDate={}, order=[];
-    for(var i=0;i<S.lastSch.length;i++){
-      var r=S.lastSch[i];
-      var key=r.dateStr;
-      if(!byDate[key]){byDate[key]={dateStr:r.dateStr,records:[],notes:[]};order.push(key);}
-      if(r.studioRecordClean) byDate[key].records.push(r.studioRecordClean);
-      if(r.note) byDate[key].notes.push(r.note);
-    }
-    var h='<table class="tbl"><tr><th>날짜</th><th>녹화</th><th>특이사항</th></tr>';
-    for(var oi=0;oi<order.length;oi++){
-      var g=byDate[order[oi]];
-      h+='<tr><td>'+g.dateStr+'</td>';
-      h+='<td>'+(g.records.length?g.records.join(', '):'-')+'</td>';
-      h+='<td>'+(g.notes.length?g.notes.join(', '):'-')+'</td></tr>';
-    }
-    h+='</table>';ld.innerHTML=h;
+  if (!xml || xml.indexOf('<entry>') === -1) {
+    return { success: true, count: 0, videos: [], note: 'RSS 수신 실패: ' + lastError };
   }
 
-  /* 이번주 일정: "시간 내용, 시간 내용" 형태 */
-  var td=document.getElementById('schThis');
-  if(!S.thisSch.length){td.innerHTML='<p class="ts tm">일정 없음</p>'}
-  else{
-    var byDate2={}, order2=[];
-    for(var i=0;i<S.thisSch.length;i++){
-      var r=S.thisSch[i];
-      var key=r.dateStr;
-      if(!byDate2[key]){byDate2[key]={dateStr:r.dateStr,uploads:[],records:[],notes:[]};order2.push(key);}
-      if(r.uploadItem) byDate2[key].uploads.push(r.uploadItem);
-      if(r.studioRecordClean) byDate2[key].records.push(r.studioRecordClean);
-      if(r.note) byDate2[key].notes.push(r.note);
+  var entryBlocks = xml.split('<entry>');
+  for (var i = 1; i < entryBlocks.length; i++) {
+    var block = entryBlocks[i];
+
+    var titleMatch = block.match(/<title>([\s\S]*?)<\/title>/);
+    var title = titleMatch ? titleMatch[1].trim() : '';
+    title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
+    var pubMatch = block.match(/<published>([\s\S]*?)<\/published>/);
+    var published = pubMatch ? pubMatch[1].trim() : '';
+
+    var vidMatch = block.match(/<yt:videoId>([\s\S]*?)<\/yt:videoId>/);
+    var videoId = vidMatch ? vidMatch[1].trim() : '';
+
+    var viewsMatch = block.match(/<media:statistics\s+views="(\d+)"/);
+    var views = viewsMatch ? viewsMatch[1] : '0';
+
+    if (title && published) {
+      videos.push({
+        title: title,
+        videoId: videoId,
+        published: published,
+        views: views
+      });
     }
-    var h='<table class="tbl"><tr><th>날짜</th><th>업로드</th><th>녹화</th><th>특이사항</th></tr>';
-    for(var oi=0;oi<order2.length;oi++){
-      var g=byDate2[order2[oi]];
-      h+='<tr><td>'+g.dateStr+'</td>';
-      h+='<td>'+(g.uploads.length?g.uploads.join(', '):'-')+'</td>';
-      h+='<td>'+(g.records.length?g.records.join(', '):'-')+'</td>';
-      h+='<td>'+(g.notes.length?g.notes.join(', '):'-')+'</td></tr>';
-    }
-    h+='</table>';td.innerHTML=h;
+  }
+
+  return { success: true, count: videos.length, videos: videos };
+}
+
+function getDocNotes() {
+  try {
+    var docId = '1bgzLVIuVQUK9TDgY5pAzR_XcQzWKEsQaDS8f9CDDlZ8';
+    var url = 'https://docs.google.com/document/d/' + docId + '/export?format=txt';
+    var response = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
+    var text = response.getContentText();
+
+    var yangNote = '';
+    var choiNote = '';
+
+    var mY = text.match(/\*\s*양영은\s*[:：]\s*(.+)/);
+    if (mY) yangNote = mY[1].trim();
+
+    var mC = text.match(/\*\s*최건일\s*[:：]\s*(.+)/);
+    if (mC) choiNote = mC[1].trim();
+
+    return { yangNote: yangNote, choiNote: choiNote };
+  } catch (err) {
+    return { yangNote: '', choiNote: '', error: err.message };
   }
 }
