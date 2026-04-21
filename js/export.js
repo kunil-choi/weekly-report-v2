@@ -12,7 +12,6 @@ function readTbl(id){
 }
 
 function buildDocTable(D,rows,colWidths,headerShade){
-  /* colWidths 비율을 유지하면서 합계를 10240 DXA(페이지 가용 너비)에 맞춤 */
   var PAGE_W=10240;
   var total=0;
   if(colWidths){for(var k=0;k<colWidths.length;k++)total+=colWidths[k];}
@@ -47,7 +46,9 @@ function buildDocTable(D,rows,colWidths,headerShade){
   }
   return new D.Table({
     rows:tblRows,
-    width:{size:5000,type:D.WidthType.PERCENTAGE}
+    width:{size:PAGE_W,type:D.WidthType.DXA},
+    layout:D.TableLayoutType.FIXED,
+    columnWidths:scaled
   });
 }
 
