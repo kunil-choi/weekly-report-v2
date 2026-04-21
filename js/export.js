@@ -12,15 +12,13 @@ function readTbl(id){
 }
 
 function buildDocTable(D,rows,colWidths,headerShade){
-  var PAGE_W=10240;
-  /* colWidths 합계를 PAGE_W에 맞게 비례 확대 */
+  var tblRows=[];
+  /* colWidths를 퍼센트로 변환 */
   var total=0;
   if(colWidths){for(var k=0;k<colWidths.length;k++)total+=colWidths[k];}
-  var scale=(total>0)?PAGE_W/total:1;
-  var scaled=[];
-  if(colWidths){for(var k=0;k<colWidths.length;k++)scaled.push(Math.round(colWidths[k]*scale));}
+  var pcts=[];
+  if(colWidths&&total>0){for(var k=0;k<colWidths.length;k++)pcts.push(Math.round(colWidths[k]/total*100));}
 
-  var tblRows=[];
   for(var ri=0;ri<rows.length;ri++){
     var cells=[];
     for(var ci=0;ci<rows[ri].length;ci++){
@@ -35,12 +33,16 @@ function buildDocTable(D,rows,colWidths,headerShade){
         margins:{top:30,bottom:30,left:50,right:50}
       };
       if(isH&&headerShade) cellOpts.shading={fill:headerShade,type:D.ShadingType.CLEAR};
-      if(scaled.length>ci) cellOpts.width={size:scaled[ci],type:D.WidthType.DXA};
+      if(pcts.length>ci) cellOpts.width={size:pcts[ci],type:D.WidthType.PERCENTAGE};
       cells.push(new D.TableCell(cellOpts));
     }
     tblRows.push(new D.TableRow({children:cells}));
   }
-  return new D.Table({rows:tblRows,width:{size:PAGE_W,type:D.WidthType.DXA}});
+  return new D.Table({
+    rows:tblRows,
+    width:{size:100,type:D.WidthType.PERCENTAGE},
+    layout:D.TableLayoutType.FIXED
+  });
 }
 
 function doGenerateDocx(){
