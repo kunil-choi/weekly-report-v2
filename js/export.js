@@ -1,29 +1,28 @@
 /* ===== DOCX 생성 ===== */
-
 function readTbl(id){
   var tbl=document.getElementById(id);if(!tbl)return[];
   var rows=tbl.querySelectorAll('tr');var data=[];
   for(var i=0;i<rows.length;i++){
     var cells=rows[i].querySelectorAll('th,td');var row=[];
-    for(var j=0;j<cells.length;j++)row.push((cells[j].innerText||cells[j].textContent||'').trim());
+    for(var j=0;j<cells.length;j++) row.push((cells[j].innerText||cells[j].textContent||'').trim());
     data.push(row);
   }
   return data;
 }
 
-function buildDocTable(D,rows,colWidths,headerShade){
+function buildDocTable(D, rows, colWidths, headerShade){
   var PAGE_W=10240;
   var total=0;
-  if(colWidths){for(var k=0;k<colWidths.length;k++)total+=colWidths[k];}
+  var k;
+  if(colWidths){for(k=0;k<colWidths.length;k++) total+=colWidths[k];}
   var scaled=[];
   if(colWidths&&total>0){
     var remain=PAGE_W;
-    for(var k=0;k<colWidths.length;k++){
+    for(k=0;k<colWidths.length;k++){
       if(k===colWidths.length-1) scaled.push(remain);
-      else{ var w=Math.round(colWidths[k]/total*PAGE_W); scaled.push(w); remain-=w; }
+      else{var w=Math.round(colWidths[k]/total*PAGE_W);scaled.push(w);remain-=w;}
     }
   }
-
   var tblRows=[];
   for(var ri=0;ri<rows.length;ri++){
     var cells=[];
@@ -33,7 +32,7 @@ function buildDocTable(D,rows,colWidths,headerShade){
         children:[new D.Paragraph({
           children:[new D.TextRun({text:rows[ri][ci]||'',bold:isH,size:18,font:'맑은 고딕'})],
           spacing:{after:20,before:20},
-          alignment: isH ? D.AlignmentType.CENTER : D.AlignmentType.LEFT
+          alignment:isH?D.AlignmentType.CENTER:D.AlignmentType.LEFT
         })],
         verticalAlign:D.VerticalAlign.CENTER,
         margins:{top:30,bottom:30,left:50,right:50}
@@ -46,7 +45,7 @@ function buildDocTable(D,rows,colWidths,headerShade){
   }
   return new D.Table({
     rows:tblRows,
-    width:{size:PAGE_W,type:D.WidthType.DXA},
+    width:{size:5000,type:D.WidthType.PERCENTAGE},
     layout:D.TableLayoutType.FIXED,
     columnWidths:scaled
   });
@@ -67,7 +66,6 @@ function doGenerateDocx(){
     document.head.appendChild(s);
     return;
   }
-
   try{
     var title = getReportTitle();
     var fname = getReportFileName();
@@ -171,4 +169,6 @@ function doGenerateDocx(){
   }catch(e){console.error('DOCX error:',e);toast('문서 생성 오류: '+e.message,'error');}
 }
 
-document.getElementById('btnGen').addEventListener('click',function(){ doGenerateDocx(); });
+document.getElementById('btnGen').addEventListener('click',function(){
+  doGenerateDocx();
+});
