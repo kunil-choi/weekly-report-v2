@@ -1,5 +1,5 @@
 /* ===== 전역 변수 ===== */
-var GAS_URL='https://script.google.com/macros/s/AKfycbwmtjpbT8g9dwr2FFIUyAvaRhCH9quBB_pFAiSYfoQXlfWwW8Qs32VXjIzf9itZgmkXgA/exec';
+var GAS_URL='https://script.google.com/macros/s/AKfycbw10SAC0ClWGl1LszMn9XfReDKJxyTfxf6aggdSxxiXKxxkOVlh4RczGrdYh9SNazb9Rw/exec';
 var S={baseDate:null,lws:null,lwe:null,tws:null,twe:null,lastSch:[],thisSch:[],yt:[],ch:{},ch2:{},ct:{},ct2:{},subs:'',nY:'',nC:'',prevWeekNum:0,prevMonth:0,prevYear:0};
 var DK=['일','월','화','수','목','금','토'];
 
