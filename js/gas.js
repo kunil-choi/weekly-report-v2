@@ -114,7 +114,10 @@ function runStep2() {
         // ── 팀원 메모 (Firebase) ──
         // V1: data.docnotes.yangNote → V2: cloudMemos[weekKey].yye
         // V1: data.docnotes.choiNote → V2: cloudMemos[weekKey].cgil
-        var thisWeekKey = toKeyV2(S.tws);
+        // 일정표는 월요일 기준 키로 저장하므로, S.tws(화요일)에서 하루 빼서 월요일 키를 구함
+        var thisMon = new Date(S.tws);
+        thisMon.setDate(thisMon.getDate() - 1);
+        var thisWeekKey = toKeyV2(thisMon);
         var memoData = cloudMemos[thisWeekKey] || {};
         if (memoData.yye)  { setV('noteY', memoData.yye);  addLog('양영은 메모: ' + memoData.yye, 'ok'); }
         if (memoData.cgil) { setV('noteC', memoData.cgil); addLog('최건일 메모: ' + memoData.cgil, 'ok'); }
